@@ -1,5 +1,5 @@
 {
-  "name": "talentiq-app",
+  "name": "kulturh-app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,10 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start": "node server.js"
   },
   "dependencies": {
+    "@react-pdf/renderer": "^4.3.2",
+    "@supabase/supabase-js": "^2.99.0",
     "dotenv": "^17.3.1",
+    "express": "^5.2.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   },
