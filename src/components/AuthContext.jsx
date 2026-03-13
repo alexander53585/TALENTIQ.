@@ -176,9 +176,17 @@ export function AuthProvider({ children }) {
     };
 
     /* ─── Auth ───────────────────────────────────────────────── */
+    const getRedirectUrl = () => {
+        // Si estamos en producción, forzamos la URL de producción
+        if (window.location.hostname !== "localhost") {
+            return "https://app.kulturh.com";
+        }
+        return window.location.origin;
+    };
+
     const signUp = async (email, password) => {
         const { data, error } = await supabase.auth.signUp({
-            email, password, options: { emailRedirectTo: window.location.origin }
+            email, password, options: { emailRedirectTo: getRedirectUrl() }
         });
         if (error) throw error;
         return data;
@@ -192,7 +200,7 @@ export function AuthProvider({ children }) {
 
     const signInWithProvider = async (provider) => {
         const { data, error } = await supabase.auth.signInWithOAuth({
-            provider, options: { redirectTo: window.location.origin }
+            provider, options: { redirectTo: getRedirectUrl() }
         });
         if (error) throw error;
         return data;
@@ -206,7 +214,7 @@ export function AuthProvider({ children }) {
 
     const resetPassword = async (email) => {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin,
+            redirectTo: getRedirectUrl(),
         });
         if (error) throw error;
     };

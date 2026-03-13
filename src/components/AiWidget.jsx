@@ -79,8 +79,8 @@ export default function AiWidget({ context }) {
             }
 
             const bodyString = JSON.stringify({
-                model: "claude-sonnet-4-20250514",
-                max_tokens: 600,
+                model: "claude-3-5-sonnet-20240620",
+                max_tokens: 1024,
                 messages: messagesForApi
             });
 
@@ -92,8 +92,11 @@ export default function AiWidget({ context }) {
                 body: bodyString,
             });
 
-            if (!res.ok) throw new Error("Error en la API");
             const data = await res.json();
+            if (!res.ok) {
+                console.error("API Error Data:", data);
+                throw new Error(data.error?.message || "Error en la respuesta de la IA");
+            }
             const text = data.content?.[0]?.text || "Lo siento, hubo un problema respondiendo.";
 
             setMessages(p => [...p, { role: "assistant", content: text }]);

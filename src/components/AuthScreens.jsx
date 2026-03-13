@@ -129,9 +129,15 @@ export function LoginScreen({ onSwitch, onLogin, onOAuth }) {
         } catch (err) {
             console.error("Login Error: ", err);
             const msg = (err.message || "").toLowerCase();
-            if (msg.includes("invalid login") || msg.includes("credentials")) setError("Correo o contraseña incorrectos.");
-            else if (msg.includes("email not confirmed")) setError("Por favor confirma tu correo. Revisa tu bandeja de entrada.");
-            else setError(err.message || "Error al iniciar sesión. Intenta de nuevo.");
+            if (msg.includes("invalid login") || msg.includes("credentials")) {
+                setError("Correo o contraseña incorrectos.");
+            } else if (msg.includes("email not confirmed")) {
+                setError("Por favor confirma tu correo electrónico antes de entrar.");
+            } else if (msg.includes("rate limit")) {
+                setError("Demasiados intentos. Por favor espera unos minutos.");
+            } else {
+                setError(err.message || "Error al iniciar sesión. Intenta de nuevo.");
+            }
         }
         setLoading(false);
     };
@@ -263,11 +269,17 @@ export function RegisterScreen({ onSwitch, onRegister, onOAuth }) {
         } catch (err) {
             console.error("Registration error:", err);
             const msg = (err.message || "").toLowerCase();
+            
             if (msg.includes("already registered") || msg.includes("taken") || msg.includes("already")) {
                 setError("Este correo ya está registrado. Intenta iniciar sesión.");
             } else if (msg.includes("password")) {
-                setError("La contraseña es muy débil o inválida. Intenta con otra.");
+                setError("La contraseña es muy débil. Debe tener al menos 6 caracteres.");
+            } else if (msg.includes("rate limit")) {
+                setError("Se ha excedido el límite de registros. Por favor, intenta de nuevo en unos minutos.");
+            } else if (msg.includes("invalid") && msg.includes("email")) {
+                setError("El correo electrónico no es válido o su dominio está restringido.");
             } else {
+                // Si hay un mensaje específico lo mostramos, si no, el genérico
                 setError(err.message || "Error al crear la cuenta. Intenta de nuevo.");
             }
         }
@@ -393,7 +405,15 @@ export function OnboardingScreen({ onComplete }) {
         try {
             await onComplete(companyName, sector);
         } catch (err) {
-            setError("Error al guardar perfil. Intenta de nuevo.");
+            console.error("Onboarding error:", err);
+            const msg = (err.message || "").toLowerCase();
+            if (msg.includes("permission denied") || msg.includes("policy")) {
+                setError("No tenemos permiso para crear tu perfil (Error de RLS). Contacta a soporte.");
+            } else if (msg.includes("duplicate")) {
+                setError("Esta empresa ya parece estar registrada.");
+            } else {
+                setError(err.message || "Error al guardar el perfil de empresa. Intenta de nuevo.");
+            }
         }
         setLoading(false);
     };
