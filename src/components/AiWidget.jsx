@@ -68,23 +68,15 @@ export default function AiWidget({ context }) {
                 finalMessages = finalMessages.slice(1);
             }
 
-            // Adaptamos al modelo que si funciona en el resto de la app
-            // Prependemos el sistema al primer mensaje de usuario si existe
-            let messagesForApi = [...finalMessages];
-            if (messagesForApi.length > 0 && messagesForApi[0].role === "user") {
-                messagesForApi[0] = {
-                    ...messagesForApi[0],
-                    content: `INSTRUCCIONES DE PERSONA: ${sys}\n\n${messagesForApi[0].content}`
-                };
-            }
-
+            // Anthropic Claude 3 prefiere el campo 'system' por separado
             const bodyString = JSON.stringify({
                 model: "claude-3-5-sonnet-20240620",
                 max_tokens: 1024,
-                messages: messagesForApi
+                system: sys,
+                messages: finalMessages
             });
 
-            const res = await fetch("/api/anthropic/v1/messages", {
+            const res = await fetch("/api/anthropic", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -95,7 +87,7 @@ export default function AiWidget({ context }) {
             const data = await res.json();
             if (!res.ok) {
                 console.error("API Error Data:", data);
-                throw new Error(data.error?.message || "Error en la respuesta de la IA");
+                throw new Error(data.error?.message || `Error ${res.status}: ${data.error || "Error en la IA"}`);
             }
             const text = data.content?.[0]?.text || "Lo siento, hubo un problema respondiendo.";
 
