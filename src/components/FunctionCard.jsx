@@ -19,7 +19,7 @@ export function FunctionTable({ funciones, onChange, puesto, area }) {
         if (!(fn.raw || "").trim()) return;
         updFn(idx, { aiStatus: "loading", aiErrorMsg: null });
         try {
-            const res = await fetch("/api/anthropic/v1/messages", {
+            const res = await fetch("/api/anthropic", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -27,7 +27,7 @@ export function FunctionTable({ funciones, onChange, puesto, area }) {
                     "anthropic-dangerous-direct-browser-access": "true",
                 },
                 body: JSON.stringify({
-                    model: "claude-sonnet-4-20250514", max_tokens: 400,
+                    model: "claude-3-5-sonnet-20241022", max_tokens: 400,
                     messages: [{ role: "user", content: buildFnAssistPrompt(fn.raw, puesto || "el cargo", area || "el area") }],
                 }),
             });

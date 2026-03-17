@@ -656,7 +656,7 @@ export default function KultuRH({ user, company, onSignOut }) {
     setScreen("predicting"); setError("");
     try {
       const data = await callAnthropic({
-        model: "claude-sonnet-4-20250514", max_tokens: 2000,
+        model: "claude-3-5-sonnet-20241022", max_tokens: 2000,
         messages: [{ role: "user", content: buildPredictPrompt(formC) }],
       });
       const raw = data.content?.map(b => b.text || "").join("").trim() || "";
@@ -683,7 +683,7 @@ export default function KultuRH({ user, company, onSignOut }) {
     setScreen("predicting"); setError("");
     try {
       const data = await callAnthropic({
-        model: "claude-sonnet-4-20250514", max_tokens: 600,
+        model: "claude-3-5-sonnet-20241022", max_tokens: 600,
         messages: [{ role: "user", content: buildConditionsPrompt(formL) }],
       });
       const raw = data.content?.map(b => b.text || "").join("").trim() || "";
@@ -720,7 +720,7 @@ export default function KultuRH({ user, company, onSignOut }) {
         : null;
 
       const data = await callAnthropic({
-        model: "claude-sonnet-4-20250514", max_tokens: 4096,
+        model: "claude-3-5-sonnet-20241022", max_tokens: 4096,
         messages: [{ role: "user", content: buildFinalPrompt(form, mode, fnData) }],
       });
       const raw = data.content?.map(b => b.text || "").join("").trim() || "";

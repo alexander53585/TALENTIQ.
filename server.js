@@ -15,7 +15,7 @@ app.use(express.static(path.join(__dirname, "dist")));
 
 // ── Proxy seguro hacia Anthropic ─────────────────────────────────────────────
 // El frontend llama a /api/anthropic/v1/messages (mismo path que en dev)
-app.post("/api/anthropic/v1/messages", async (req, res) => {
+app.post("/api/anthropic", async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || "";
 
   if (!apiKey) {
