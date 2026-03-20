@@ -47,8 +47,11 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (!membership) {
-      // Usuario sin membresía → onboarding para crear su organización
-      return NextResponse.redirect(new URL('/onboarding', request.url))
+      // Si eligió "configurar más tarde", dejarlo pasar
+      const skipCookie = request.cookies.get('onboarding_skip')?.value
+      if (!skipCookie) {
+        return NextResponse.redirect(new URL('/onboarding', request.url))
+      }
     }
   }
 

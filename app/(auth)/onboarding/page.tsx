@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -50,7 +50,27 @@ export default function OnboardingPage() {
   const [companyName, setCompanyName] = useState('')
   const [sector, setSector] = useState('')
   const [loading, setLoading] = useState(false)
+  const [checking, setChecking] = useState(true)
   const [error, setError] = useState('')
+
+  // Si el usuario ya tiene membresía activa, llevarlo directo al dashboard
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) { setChecking(false); return }
+      supabase
+        .from('user_memberships')
+        .select('id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }) => {
+          if (data) router.replace('/dashboard')
+          else setChecking(false)
+        })
+    })
+  }, [router])
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
@@ -60,13 +80,11 @@ export default function OnboardingPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Sin sesión activa')
 
-      // Generar slug a partir del nombre
       const slug = companyName.toLowerCase()
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
         .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
         + '-' + Math.random().toString(36).slice(2, 6)
 
-      // Crear organización
       const { data: org, error: orgError } = await supabase
         .from('organizations')
         .insert({ name: companyName, slug, plan: 'free' })
@@ -74,24 +92,37 @@ export default function OnboardingPage() {
         .single()
       if (orgError) throw orgError
 
-      // Crear membresía como owner
       const { error: memError } = await supabase
         .from('user_memberships')
         .insert({ user_id: user.id, organization_id: org.id, role: 'owner', scope: 'organization', is_active: true })
       if (memError) throw memError
 
-      // Guardar sector en metadata de usuario
       await supabase.auth.updateUser({ data: { sector } })
 
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {
       const msg = (err.message || '').toLowerCase()
-      if (msg.includes('permission denied') || msg.includes('policy')) setError('No tenemos permiso para crear tu perfil (Error de RLS). Contacta a soporte.')
-      else if (msg.includes('duplicate')) setError('Esta empresa ya parece estar registrada.')
-      else setError(err.message || 'Error al guardar el perfil de empresa. Intenta de nuevo.')
+      if (msg.includes('duplicate')) setError('Ya existe una empresa con ese nombre. Intenta con un nombre diferente.')
+      else if (msg.includes('permission denied') || msg.includes('policy')) setError('Error de permisos. Contacta a soporte.')
+      else setError(err.message || 'Error al guardar. Intenta de nuevo.')
     }
     setLoading(false)
+  }
+
+  const handleSkip = () => {
+    // Guardar flag en cookie para que el middleware lo permita pasar
+    document.cookie = 'onboarding_skip=1; path=/; max-age=86400; SameSite=Lax'
+    router.push('/dashboard')
+  }
+
+  if (checking) {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 32, height: 32, border: `3px solid ${C.border}`, borderTopColor: C.primary, borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <style>{KEYFRAMES}</style>
+      </div>
+    )
   }
 
   return (
@@ -105,7 +136,11 @@ export default function OnboardingPage() {
             Solo necesitamos un par de datos para personalizar tu espacio de trabajo.
           </p>
 
-          {error && <div style={{ background: C.errorDim, border: `1px solid ${C.error}25`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: C.error, fontFamily: FF, lineHeight: 1.5 }}>{error}</div>}
+          {error && (
+            <div style={{ background: C.errorDim, border: `1px solid ${C.error}25`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: C.error, fontFamily: FF, lineHeight: 1.5 }}>
+              {error}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
             <AuthInput label="¿Cómo se llama tu empresa?" value={companyName} onChange={setCompanyName} placeholder="Ej. Grupo Empresarial XYZ" required icon="🏢" />
@@ -120,11 +155,25 @@ export default function OnboardingPage() {
               </select>
             </div>
 
-            <button type="submit" disabled={loading} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: loading ? C.surfaceAlt : `linear-gradient(135deg, ${C.primary}, ${C.primaryLight})`, border: 'none', color: loading ? C.textMuted : '#fff', borderRadius: 10, padding: '12px', fontFamily: FF, fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', boxShadow: loading ? 'none' : `0 4px 14px ${C.primaryGlow}`, transition: 'all 0.2s' }}>
+            <button type="submit" disabled={loading} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: loading ? C.surfaceAlt : `linear-gradient(135deg, ${C.primary}, ${C.primaryLight})`, border: 'none', color: loading ? C.textMuted : '#fff', borderRadius: 10, padding: '12px', fontFamily: FF, fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', boxShadow: loading ? 'none' : `0 4px 14px ${C.primaryGlow}`, transition: 'all 0.2s', marginBottom: 12 }}>
               {loading ? <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> : 'Finalizar configuración →'}
             </button>
           </form>
+
+          <button
+            type="button"
+            onClick={handleSkip}
+            style={{ width: '100%', background: 'none', border: 'none', color: C.textMuted, fontFamily: FF, fontSize: 13, cursor: 'pointer', padding: '8px', borderRadius: 8, transition: 'color 0.2s' }}
+            onMouseOver={e => (e.currentTarget.style.color = C.textSecondary)}
+            onMouseOut={e => (e.currentTarget.style.color = C.textMuted)}
+          >
+            Configurar más tarde →
+          </button>
         </div>
+
+        <p style={{ textAlign: 'center', fontSize: 12, color: C.textMuted, fontFamily: FF, marginTop: 16, lineHeight: 1.6 }}>
+          Si fuiste invitado por tu empresa, solicita al administrador que te agregue directamente.
+        </p>
       </div>
     </div>
   )
