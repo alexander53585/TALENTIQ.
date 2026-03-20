@@ -1,974 +1,341 @@
-'use client';
-
-import { useState, useRef, useEffect, lazy, Suspense } from "react";
-import { C, FF, KEYFRAMES, STEPS, calcScore } from "@/lib/tokens";
-import { Nav, Stepper, Field, Spinner, Tag, ResultCard } from "@/components/kulturh/Atoms";
-import { FunctionTable, EssentialPrioritization } from "@/components/kulturh/FunctionCard";
+import { createClient } from '@/lib/supabase/server'
+import Link from 'next/link'
 import {
-  parseAiJson, buildPredictPrompt, buildConditionsPrompt, buildFinalPrompt,
-  saveDesc, loadHistorial, deleteDesc,
-  fieldsCrear, fieldsLevantar, initCrear, mkInitLevantar,
-} from "@/lib/prompts";
-import AiWidget from "@/components/kulturh/AiWidget";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+  Dna, Building2, Users, BarChart3, BookOpen,
+  AlertTriangle, ArrowRight, Plus, CheckCircle2,
+  Clock, Briefcase, TrendingUp, Settings,
+} from 'lucide-react'
 
-const PDFViewer = lazy(() => import("@/components/kulturh/PDFViewer"));
-const AdminPanel = lazy(() => import("@/components/kulturh/AdminPanel"));
+/* ── helpers ─────────────────────────────────────────── */
+async function fetchMetrics(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string) {
+  const [profileRes, positionsRes, vacanciesRes, employeesRes] = await Promise.allSettled([
+    supabase
+      .from('organization_profiles')
+      .select('readiness_score, kultudna_summary')
+      .eq('organization_id', orgId)
+      .maybeSingle(),
 
-/* ═══════════════ HISTORIAL ══════════════ */
-function HistorialGallery({ onViewProfile }: { onViewProfile: (item: any) => void }) {
-  const [items, setItems] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
+    supabase
+      .from('job_positions')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId),
 
-  useEffect(() => { loadHistorial().then(d => { setItems(d); setLoading(false); }); }, []);
+    supabase
+      .from('vacancies')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('status', 'active'),
 
-  const handleDelete = async (key: string) => {
-    setDeleting(key);
-    await deleteDesc(key);
-    setItems(p => p.filter(i => i.key !== key));
-    setDeleting(null);
-  };
+    supabase
+      .from('employees')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', orgId)
+      .eq('is_active', true),
+  ])
 
-  if (loading || items.length === 0) return null;
+  const profile = profileRes.status === 'fulfilled' ? profileRes.value.data : null
+  const positions = positionsRes.status === 'fulfilled' ? (positionsRes.value.count ?? 0) : 0
+  const vacancies = vacanciesRes.status === 'fulfilled' ? (vacanciesRes.value.count ?? 0) : 0
+  const employees = employeesRes.status === 'fulfilled' ? (employeesRes.value.count ?? 0) : 0
 
-  return (
-    <div style={{ marginTop: 56 }}>
-      <div style={{ textAlign: "center", marginBottom: 28 }}>
-        <h3 style={{ fontFamily: FF, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 6 }}>
-          Descriptivos generados
-        </h3>
-        <p style={{ fontSize: 14, color: C.textSecondary, fontFamily: FF }}>
-          {items.length} descriptivo{items.length !== 1 ? "s" : ""} en tu historial
-        </p>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
-        {items.map(item => {
-          const isOpen = expanded === item.key;
-          const date = new Date(item.createdAt).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
-          const gc = (g: string) => (({ A: C.secondary, B: C.success, C: C.primary, D: C.warn, E: C.error } as any)[g] || C.primary);
-          return (
-            <div key={item.key} style={{
-              background: "#fff", border: `1px solid ${isOpen ? C.primary + "40" : C.border}`,
-              borderRadius: 14, overflow: "hidden", transition: "all 0.3s",
-              boxShadow: isOpen ? C.shadowMd : C.shadow,
-            }}>
-              <div style={{ padding: "18px 18px 14px", cursor: "pointer" }} onClick={() => setExpanded(isOpen ? null : item.key)}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
-                  <Tag color={item.mode === "crear" ? C.primary : "#7C3AED"}>
-                    {item.mode === "crear" ? "Nuevo" : "Levantado"}
-                  </Tag>
-                  <div style={{
-                    width: 34, height: 34, borderRadius: "50%", border: `2px solid ${gc(item.grado)}`,
-                    background: `${gc(item.grado)}12`, display: "flex", alignItems: "center", justifyContent: "center",
-                    fontFamily: FF, fontSize: 14, fontWeight: 700, color: gc(item.grado),
-                  }}>{item.grado}</div>
-                </div>
-                <div style={{ fontFamily: FF, fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>{item.puesto}</div>
-                <div style={{ fontSize: 13, color: C.textSecondary, fontFamily: FF, marginBottom: 8 }}>{item.area}</div>
-                {item.banda?.minimo && <div style={{ fontSize: 13, color: C.primary, fontFamily: FF, fontWeight: 600, marginBottom: 4 }}>{item.banda.minimo} – {item.banda.maximo}</div>}
-                <div style={{ fontSize: 12, color: C.textMuted, fontFamily: FF }}>{date}</div>
-              </div>
-              {isOpen && (
-                <div style={{ borderTop: `1px solid ${C.border}`, padding: "14px 18px", background: C.surfaceAlt }}>
-                  <div style={{ fontSize: 13, color: C.textSecondary, fontFamily: FF, lineHeight: 1.75, marginBottom: 12, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden" } as any}>
-                    {item.resumen}
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => onViewProfile(item)} style={{
-                      flex: 1, background: C.primary, border: "none", color: "#fff",
-                      borderRadius: 10, padding: "9px", fontFamily: FF, fontSize: 13, fontWeight: 600, cursor: "pointer",
-                    }}>Ver descriptivo →</button>
-                    <button onClick={() => handleDelete(item.key)} disabled={deleting === item.key} style={{
-                      background: "#fff", border: `1px solid ${C.border}`, color: C.textMuted,
-                      borderRadius: 10, padding: "9px 12px", fontFamily: FF, fontSize: 12, cursor: "pointer",
-                    }}>{deleting === item.key ? "..." : "🗑"}</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+  return {
+    foundationScore: profile?.readiness_score ?? 0,
+    hasKultuDNA: !!profile?.kultudna_summary,
+    positions,
+    vacancies,
+    employees,
+  }
 }
 
-/* ═══════════════ LANDING ════════════════ */
-function Landing({ onSelect, onViewProfile }: { onSelect: (id: string) => void; onViewProfile: (item: any) => void }) {
-  const [hov, setHov] = useState<string | null>(null);
-  const cards = [
-    {
-      id: "crear", badge: "CARGO NUEVO", title: "Crear un cargo",
-      desc: "El puesto no existe. Describe el propósito y el sistema diseñará funciones, condiciones, perfil y valoración completa.",
-      bullets: ["Solo necesitas describir el propósito del cargo", "El sistema genera funciones, condiciones y perfil", "Revisas y ajustas paso a paso"],
-      cta: "Diseñar cargo →", color: C.primary,
-    },
-    {
-      id: "levantar", badge: "CARGO EXISTENTE", title: "Levantar un cargo",
-      desc: "La persona ya trabaja pero sin descriptivo formal. El sistema formaliza funciones y genera el perfil completo.",
-      bullets: ["Describe cada función en tus palabras", "El sistema convierte a redacción formal", "Condiciones pre-completadas automáticamente"],
-      cta: "Levantar cargo →", color: "#7C3AED",
-    },
-  ];
+/* ── sub-components ───────────────────────────────────── */
+function ModuleCard({
+  icon: Icon,
+  label,
+  subtitle,
+  metric,
+  metricLabel,
+  cta,
+  ctaHref,
+  locked,
+  comingSoon,
+  status,
+}: {
+  icon: React.ElementType
+  label: string
+  subtitle: string
+  metric?: string | number
+  metricLabel?: string
+  cta?: string
+  ctaHref?: string
+  locked?: boolean
+  comingSoon?: boolean
+  status?: 'ok' | 'warning' | 'empty'
+}) {
+  const statusColors = {
+    ok: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+    warning: 'bg-amber-50 text-amber-600 border-amber-100',
+    empty: 'bg-slate-50 text-slate-400 border-slate-100',
+  }
+  const iconBg = comingSoon
+    ? 'bg-slate-100 text-slate-400'
+    : locked
+      ? 'bg-amber-50 text-amber-400'
+      : 'bg-[#3B6FCA]/10 text-[#3B6FCA]'
 
   return (
-    <div style={{ animation: "fadeIn 0.6s ease" }}>
-      <div style={{ textAlign: "center", marginBottom: 52, paddingTop: 20 }}>
-        <div style={{
-          display: "inline-flex", alignItems: "center", gap: 8, background: C.primaryDim,
-          border: `1px solid ${C.primary}20`, borderRadius: 24, padding: "6px 18px", marginBottom: 24,
-        }}>
-          <span style={{ fontSize: 12, color: C.primary, fontWeight: 600, fontFamily: FF }}>
-            ✦ KultuRH · Gestión inteligente de cargos
+    <div
+      className={`relative bg-white rounded-2xl border p-5 flex flex-col gap-4 transition-all duration-200
+        ${comingSoon || locked
+          ? 'border-slate-200 opacity-70'
+          : 'border-slate-200 hover:border-[#3B6FCA]/40 hover:shadow-md hover:shadow-[#3B6FCA]/5 cursor-pointer'
+        }`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconBg}`}>
+          <Icon size={20} />
+        </div>
+        {comingSoon && (
+          <span className="text-[10px] font-semibold bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full border border-slate-200 tracking-wide">
+            PRÓXIMAMENTE
           </span>
+        )}
+        {!comingSoon && status && (
+          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border tracking-wide ${statusColors[status]}`}>
+            {status === 'ok' ? 'ACTIVO' : status === 'warning' ? 'PENDIENTE' : 'VACÍO'}
+          </span>
+        )}
+      </div>
+
+      {/* Label */}
+      <div>
+        <p className="text-sm font-semibold text-[#1E2A45] leading-none">{label}</p>
+        <p className="text-xs text-slate-400 mt-1 leading-relaxed">{subtitle}</p>
+      </div>
+
+      {/* Metric */}
+      {!comingSoon && (
+        <div className="flex items-end gap-1.5">
+          {metric !== undefined ? (
+            <>
+              <span className="text-3xl font-bold text-[#1E2A45] leading-none">{metric}</span>
+              {metricLabel && <span className="text-xs text-slate-400 mb-0.5">{metricLabel}</span>}
+            </>
+          ) : (
+            <span className="text-sm text-slate-400 italic">Sin datos</span>
+          )}
         </div>
-        <h1 style={{ fontFamily: FF, fontSize: 42, fontWeight: 700, lineHeight: 1.15, margin: "0 0 16px", color: C.text, letterSpacing: "-0.02em" }}>
-          Descriptivos de puesto<br />
-          <span style={{ color: C.primary }}>con inteligencia artificial</span>
-        </h1>
-        <p style={{ fontSize: 16, color: C.textSecondary, maxWidth: 520, margin: "0 auto", lineHeight: 1.8, fontFamily: FF }}>
-          Construye descriptivos formales completos con valoración y banda salarial.
-          El sistema te guía en cada paso.
+      )}
+
+      {/* CTA */}
+      {cta && ctaHref && !comingSoon && !locked && (
+        <Link
+          href={ctaHref}
+          className="mt-auto flex items-center gap-1.5 text-xs font-semibold text-[#3B6FCA] hover:gap-2.5 transition-all duration-150"
+        >
+          {cta} <ArrowRight size={13} />
+        </Link>
+      )}
+      {locked && (
+        <p className="mt-auto text-xs text-amber-500 font-medium flex items-center gap-1.5">
+          <AlertTriangle size={12} /> Requiere Foundation
         </p>
-      </div>
-
-      <div style={{ textAlign: "center", marginBottom: 36 }}>
-        <div style={{ fontFamily: FF, fontSize: 18, color: C.textSecondary, fontWeight: 500 }}>¿Por dónde empezamos?</div>
-        <div style={{ width: 40, height: 3, background: C.primary, margin: "12px auto 0", borderRadius: 2 }} />
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 780, margin: "0 auto" }}>
-        {cards.map(c => (
-          <div key={c.id} onClick={() => onSelect(c.id)}
-            onMouseEnter={() => setHov(c.id)} onMouseLeave={() => setHov(null)}
-            style={{
-              background: "#fff", border: `2px solid ${hov === c.id ? c.color : C.border}`,
-              borderRadius: 16, padding: "30px 26px", cursor: "pointer", transition: "all 0.3s",
-              transform: hov === c.id ? "translateY(-4px)" : "translateY(0)",
-              boxShadow: hov === c.id ? C.shadowLg : C.shadow,
-            }}>
-            <div style={{
-              display: "inline-block", background: `${c.color}10`, border: `1px solid ${c.color}30`,
-              borderRadius: 8, padding: "4px 12px", marginBottom: 18,
-            }}>
-              <span style={{ fontSize: 11, color: c.color, fontFamily: FF, fontWeight: 700, letterSpacing: "0.05em" }}>{c.badge}</span>
-            </div>
-            <h2 style={{ fontFamily: FF, fontSize: 22, fontWeight: 700, margin: "0 0 10px", color: C.text }}>{c.title}</h2>
-            <p style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.8, margin: "0 0 20px", fontFamily: FF }}>{c.desc}</p>
-            <div style={{ marginBottom: 24 }}>
-              {c.bullets.map((b, i) => (
-                <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
-                  <span style={{ color: c.color, fontSize: 16, lineHeight: 1, flexShrink: 0 }}>›</span>
-                  <span style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.7, fontFamily: FF }}>{b}</span>
-                </div>
-              ))}
-            </div>
-            <div style={{
-              display: "inline-flex", alignItems: "center",
-              background: hov === c.id ? c.color : "transparent",
-              border: `2px solid ${c.color}`, borderRadius: 10,
-              padding: "10px 20px", fontSize: 14, fontWeight: 600,
-              color: hov === c.id ? "#fff" : c.color, fontFamily: FF,
-              transition: "all 0.2s",
-            }}>{c.cta}</div>
-          </div>
-        ))}
-      </div>
-      <HistorialGallery onViewProfile={onViewProfile} />
-    </div>
-  );
-}
-
-/* ═══════════════ RESULTS ════════════════ */
-interface ResultsProps {
-  result: any;
-  form: any;
-  mode: string;
-  onReset: () => void;
-  onOpenPdf?: () => void;
-}
-function Results({ result, form, mode, onReset, onOpenPdf }: ResultsProps) {
-  const [saved, setSaved] = useState(false);
-  useEffect(() => { saveDesc(result, form, mode).then(ok => { if (ok) setSaved(true); }); }, []);
-  const gc = (g: string) => (({ A: C.secondary, B: C.success, C: C.primary, D: C.warn, E: C.error } as any)[g] || C.primary);
-  const vc = result.valuacionCargo;
-
-  return (
-    <div style={{ animation: "fadeIn 0.5s ease" }}>
-      <div style={{
-        marginBottom: 14, padding: "12px 18px",
-        background: saved ? C.successDim : C.primaryDim,
-        border: `1px solid ${saved ? C.success + "30" : C.primary + "20"}`,
-        borderRadius: 12, display: "flex", alignItems: "center", gap: 10,
-      }}>
-        <span style={{ fontSize: 14 }}>{saved ? "✓" : "⟳"}</span>
-        <span style={{ fontSize: 13, color: saved ? C.success : C.textSecondary, fontFamily: FF }}>
-          {saved ? "Descriptivo guardado en historial" : "Guardando..."}
-        </span>
-      </div>
-
-      {/* Hero header */}
-      <div style={{
-        background: "#fff", border: `1px solid ${C.border}`, borderRadius: 16,
-        padding: "30px 34px", marginBottom: 18, boxShadow: C.shadow,
-      }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-          <Tag color={mode === "crear" ? C.primary : "#7C3AED"}>{mode === "crear" ? "Cargo diseñado" : "Cargo levantado"}</Tag>
-          <Tag color={C.secondary}>Descriptivo formal</Tag>
-        </div>
-        <h1 style={{ margin: "0 0 4px", fontFamily: FF, fontSize: 28, fontWeight: 700, color: C.text }}>{form.puesto}</h1>
-        <div style={{ color: C.textSecondary, fontSize: 15, marginBottom: 24, fontFamily: FF }}>{form.area} · Reporta a: {form.reportaA}</div>
-        {vc && (
-          <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start" }}>
-            {[
-              { v: vc.puntajeTotal, lbl: "Puntaje", clr: vc.puntajeTotal / vc.puntajeMaximo >= .75 ? C.success : vc.puntajeTotal / vc.puntajeMaximo >= .5 ? C.primary : C.error, sz: 18 },
-              { v: vc.gradoCargo, lbl: "Grado", clr: gc(vc.gradoCargo), sz: 22 },
-            ].map((b, i) => (
-              <div key={i} style={{ textAlign: "center" }}>
-                <div style={{
-                  width: 60, height: 60, borderRadius: "50%", border: `3px solid ${b.clr}`,
-                  display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 6px",
-                  background: `${b.clr}10`, fontFamily: FF, fontSize: b.sz, fontWeight: 700, color: b.clr,
-                }}>{b.v}</div>
-                <div style={{ fontSize: 11, color: C.textSecondary, fontFamily: FF, fontWeight: 500 }}>{b.lbl}</div>
-              </div>
-            ))}
-            <div style={{ flex: 1, minWidth: 175 }}>
-              <div style={{ fontSize: 11, color: C.textSecondary, fontFamily: FF, fontWeight: 500, marginBottom: 6 }}>Banda salarial</div>
-              <div style={{ fontFamily: FF, fontSize: 18, color: C.primary, fontWeight: 700 }}>{vc.bandaSalarial?.minimo} – {vc.bandaSalarial?.maximo}</div>
-              <div style={{ fontSize: 13, color: C.textSecondary, fontFamily: FF }}>Punto medio: {vc.bandaSalarial?.medio} · {vc.posicionMercado}</div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <ResultCard title="Resumen ejecutivo" icon="📄">
-        <div style={{ fontSize: 15, lineHeight: 1.85, color: C.textSecondary, fontFamily: FF }}>{result.resumenEjecutivo}</div>
-        {result.misionPuesto && (
-          <div style={{ marginTop: 14, padding: "14px 18px", background: C.primaryDim, borderLeft: `3px solid ${C.primary}`, borderRadius: "0 8px 8px 0" }}>
-            <div style={{ fontSize: 11, color: C.primary, fontWeight: 600, marginBottom: 5, fontFamily: FF }}>MISIÓN DEL PUESTO</div>
-            <div style={{ fontFamily: FF, fontSize: 15, color: C.text, lineHeight: 1.7, fontStyle: "italic" }}>&quot;{result.misionPuesto}&quot;</div>
-          </div>
-        )}
-      </ResultCard>
-
-      {result.responsabilidadesClave?.length > 0 && (
-        <ResultCard title="Funciones principales" icon="📋">
-          {result.responsabilidadesClave.map((r: any) => (
-            <div key={r.numero} style={{ display: "flex", gap: 14, marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.borderLight}` }}>
-              <div style={{
-                minWidth: 30, height: 30, borderRadius: 8,
-                background: r.esEsencial ? C.successDim : C.primaryDim,
-                border: `1px solid ${r.esEsencial ? C.success + "40" : C.primary + "30"}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: FF, fontSize: 13, color: r.esEsencial ? C.success : C.primary, fontWeight: 700,
-              }}>{r.numero}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: C.text, fontFamily: FF }}>{r.titulo}</span>
-                  {r.porcentajeTiempo && <span style={{ fontSize: 12, color: C.textMuted, fontFamily: FF }}>{r.porcentajeTiempo}</span>}
-                  {r.esEsencial && <Tag color={C.success}>Esencial</Tag>}
-                </div>
-                <div style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.8, fontFamily: FF }}>{r.descripcion}</div>
-              </div>
-            </div>
-          ))}
-        </ResultCard>
-      )}
-
-      {result.perfilIdeal && (
-        <ResultCard title="Perfil del candidato ideal" icon="👤">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
-            {[["Formación académica", "educacion"], ["Experiencia profesional", "experiencia"]].map(([lbl, k]) => (
-              <div key={k}>
-                <div style={{ fontSize: 11, color: C.primary, fontWeight: 600, marginBottom: 6, fontFamily: FF }}>{lbl.toUpperCase()}</div>
-                <div style={{ fontSize: 14, color: C.textSecondary, lineHeight: 1.75, fontFamily: FF }}>{result.perfilIdeal[k]}</div>
-              </div>
-            ))}
-          </div>
-          {result.perfilIdeal.conocimientosTecnicos?.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 11, color: C.primary, fontWeight: 600, marginBottom: 8, fontFamily: FF }}>CONOCIMIENTOS TÉCNICOS</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>{result.perfilIdeal.conocimientosTecnicos.map((k: string, i: number) => <Tag key={i}>{k}</Tag>)}</div>
-            </div>
-          )}
-          {result.perfilIdeal.competenciasClave?.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, color: C.primary, fontWeight: 600, marginBottom: 10, fontFamily: FF }}>COMPETENCIAS CONDUCTUALES</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 10 }}>
-                {result.perfilIdeal.competenciasClave.map((comp: any, i: number) => (
-                  <div key={i} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4, flexWrap: "wrap", gap: 4 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, fontFamily: FF }}>{comp.competencia}</span>
-                      <Tag color={comp.nivel === "Alto" ? C.success : comp.nivel === "Medio" ? C.primary : C.textMuted}>{comp.nivel}</Tag>
-                    </div>
-                    <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.55, fontFamily: FF }}>{comp.descripcion}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </ResultCard>
-      )}
-
-      <div style={{ display: "flex", justifyContent: "center", gap: 12, marginTop: 28, flexWrap: "wrap" }}>
-        <button onClick={onReset} style={{
-          background: "#fff", border: `2px solid ${C.border}`, color: C.textSecondary,
-          borderRadius: 10, padding: "12px 28px", fontFamily: FF, fontSize: 14, fontWeight: 600, cursor: "pointer",
-        }}>← Volver al inicio</button>
-        {onOpenPdf && (
-          <button onClick={onOpenPdf} style={{
-            background: `linear-gradient(135deg, ${C.primary}, ${C.primaryLight})`,
-            border: "none", color: "#fff",
-            borderRadius: 10, padding: "12px 28px", fontFamily: FF, fontSize: 14, fontWeight: 700, cursor: "pointer",
-            boxShadow: `0 4px 12px ${C.primaryGlow}`,
-          }}>📄 Ver descriptivo PDF</button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ═══════════════ PROFILE VIEWER ═════════════════ */
-function ProfileViewer({ item, onBack }: { item: any; onBack: () => void }) {
-  return (
-    <div style={{ animation: "fadeIn 0.4s ease" }}>
-      <div style={{ marginBottom: 18, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-        <button onClick={onBack} style={{
-          background: "#fff", border: `1px solid ${C.border}`, color: C.textSecondary,
-          borderRadius: 10, padding: "9px 18px", fontFamily: FF, fontSize: 13, fontWeight: 600, cursor: "pointer",
-        }}>← Volver al historial</button>
-        <div style={{ fontSize: 13, color: C.textMuted, fontFamily: FF }}>
-          {new Date(item.createdAt).toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })}
-        </div>
-      </div>
-      {item.result && (
-        <Results result={item.result} form={{ puesto: item.puesto, area: item.area, reportaA: item.reportaA }}
-          mode={item.mode} onReset={onBack} />
       )}
     </div>
-  );
+  )
 }
 
-/* ═══════════════ FUNCIONES BLOQUES (Crear cargo) ═════════════════ */
-function FuncionesBloques({ funciones, onChange }: { funciones: any[]; onChange: (key: string, value: any) => void }) {
-  const SCORE_THRESHOLD = 10;
-  const calcFnScore = (f: any) => (f.freq * f.impact) + f.complexity;
-
-  const E2E_LABELS = ["Planificación", "Análisis", "Diseño / Desarrollo", "Ejecución", "Supervisión", "Comunicación", "Mejora continua"];
-
-  const updateFn = (idx: number, patch: any) => {
-    const updated = funciones.map((f, i) => i !== idx ? f : { ...f, ...patch });
-    onChange("funcionesEstructuradas", updated);
-    onChange("responsabilidades", updated.map((f: any) => f.desc).join(" | "));
-  };
-
+function FoundationProgress({ score }: { score: number }) {
+  const pct = Math.min(100, Math.max(0, score))
   return (
-    <div>
-      <div style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
-        <div style={{ fontSize: 13, color: C.textSecondary, fontFamily: FF }}>
-          Funciones generadas en orden End-to-End. Revisa, edita y confirma cada una.
-        </div>
+    <div className="flex items-center gap-3">
+      <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all duration-700"
+          style={{
+            width: `${pct}%`,
+            background: pct === 100 ? '#10b981' : pct > 50 ? '#3B6FCA' : '#f59e0b',
+          }}
+        />
       </div>
-      {funciones.map((fn, idx) => {
-        const score = calcFnScore(fn);
-        const isEssential = fn.esEsencial || score >= SCORE_THRESHOLD;
-        const e2eLabel = E2E_LABELS[Math.min(idx, E2E_LABELS.length - 1)];
-        return (
-          <div key={idx} style={{
-            border: `1px solid ${isEssential ? C.primary + "40" : C.border}`,
-            borderRadius: 12, padding: "16px 18px", marginBottom: 12,
-            background: isEssential ? C.primary + "06" : "#fff",
-            position: "relative", transition: "all 0.2s",
-          }}>
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 10 }}>
-              <div style={{
-                minWidth: 22, height: 22, borderRadius: "50%",
-                background: C.surfaceAlt, border: `1px solid ${C.border}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 11, fontWeight: 700, color: C.textMuted, fontFamily: FF, flexShrink: 0,
-              }}>{idx + 1}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, textTransform: "uppercase",
-                    color: C.textMuted, fontFamily: FF, letterSpacing: "0.5px",
-                    background: C.surfaceAlt, borderRadius: 4, padding: "2px 6px",
-                  }}>{e2eLabel}</span>
-                  {isEssential && (
-                    <span style={{
-                      fontSize: 11, fontWeight: 700, color: "#F59E0B",
-                      fontFamily: FF, display: "flex", alignItems: "center", gap: 3,
-                    }}>⭐ Esencial</span>
-                  )}
-                  <span style={{
-                    fontSize: 10, color: C.textMuted, fontFamily: FF,
-                    background: C.surfaceAlt, borderRadius: 4, padding: "2px 6px",
-                  }}>Score: {score}</span>
-                </div>
-                <textarea
-                  value={fn.desc}
-                  onChange={e => updateFn(idx, { desc: e.target.value })}
-                  rows={2}
-                  style={{
-                    width: "100%", boxSizing: "border-box", border: `1px solid ${C.borderLight}`,
-                    borderRadius: 8, padding: "8px 10px", fontFamily: FF, fontSize: 13,
-                    color: C.text, lineHeight: 1.6, resize: "vertical",
-                    background: "transparent", outline: "none",
-                  }}
-                />
-              </div>
-            </div>
-            {/* Factores */}
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", paddingLeft: 32 }}>
-              {[
-                { label: "Frecuencia", key: "freq" },
-                { label: "Impacto", key: "impact" },
-                { label: "Complejidad", key: "complexity" },
-              ].map(({ label, key }) => (
-                <div key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 11, color: C.textMuted, fontFamily: FF }}>{label}</span>
-                  <div style={{ display: "flex", gap: 3 }}>
-                    {[1, 2, 3, 4, 5].map(v => (
-                      <button key={v} onClick={() => updateFn(idx, { [key]: v })} style={{
-                        width: 20, height: 20, borderRadius: 4, border: "none",
-                        background: fn[key] >= v ? C.primary : C.surfaceAlt,
-                        cursor: "pointer", transition: "background 0.15s",
-                      }} />
-                    ))}
-                  </div>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: C.textSecondary, fontFamily: FF }}>{fn[key]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
+      <span className="text-sm font-bold text-[#1E2A45] shrink-0">{pct}%</span>
     </div>
-  );
+  )
 }
 
-/* ═══════ Humanizar tiempo ═══════ */
-function timeAgo(ms: number): string {
-  const s = Math.floor((Date.now() - ms) / 1000);
-  if (s < 60) return "hace unos segundos";
-  if (s < 3600) return `hace ${Math.floor(s / 60)} min`;
-  if (s < 86400) return `hace ${Math.floor(s / 3600)} h`;
-  return `hace ${Math.floor(s / 86400)} días`;
-}
+/* ── Page ─────────────────────────────────────────────── */
+export default async function DashboardPage() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-/* ═══════ Toast de recuperación de borrador ═══════ */
-function DraftRecoveryToast({ draft, onRestore, onDiscard }: { draft: any; onRestore: () => void; onDiscard: () => void }) {
-  return (
-    <div style={{
-      position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
-      zIndex: 9999, background: "#fff", borderRadius: 14, padding: "18px 24px",
-      boxShadow: "0 8px 32px rgba(0,0,0,0.15)", border: `1px solid ${C.primary}30`,
-      display: "flex", alignItems: "center", gap: 16, maxWidth: 520, width: "90%",
-      fontFamily: FF, animation: "slideUp 0.4s ease",
-    }}>
-      <div style={{
-        width: 42, height: 42, borderRadius: 10, flexShrink: 0,
-        background: C.primaryDim, display: "flex", alignItems: "center", justifyContent: "center",
-        fontSize: 20,
-      }}>📋</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 2 }}>
-          Tienes un borrador sin terminar
-        </div>
-        <div style={{ fontSize: 12, color: C.textMuted }}>
-          {draft.mode === "crear" ? "Crear cargo" : "Levantar cargo"}
-          {" — "}
-          <strong>{draft.formC?.puesto || draft.formL?.puesto || "Sin nombre"}</strong>
-          {" · Paso "}{draft.step}/4
-          {" · "}{timeAgo(draft.savedAt)}
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <button onClick={onDiscard} style={{
-          background: "transparent", border: `1px solid ${C.border}`, color: C.textMuted,
-          borderRadius: 8, padding: "7px 14px", fontFamily: FF, fontSize: 12, fontWeight: 600,
-          cursor: "pointer",
-        }}>Descartar</button>
-        <button onClick={onRestore} style={{
-          background: `linear-gradient(135deg, ${C.primary}, ${C.primaryLight})`,
-          border: "none", color: "#fff",
-          borderRadius: 8, padding: "7px 14px", fontFamily: FF, fontSize: 12, fontWeight: 700,
-          cursor: "pointer", boxShadow: `0 2px 8px ${C.primaryGlow}`,
-        }}>Continuar</button>
-      </div>
-    </div>
-  );
-}
+  const { data: membership } = await supabase
+    .from('user_memberships')
+    .select('organization_id, role, organizations(name)')
+    .eq('user_id', user!.id)
+    .eq('is_active', true)
+    .maybeSingle()
 
-/* ═══════════════ MAIN APP ═══════════════ */
-export default function DashboardPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [company, setCompany] = useState<any>(null);
+  const orgId = membership?.organization_id
+  const org = (Array.isArray(membership?.organizations)
+    ? membership?.organizations[0]
+    : membership?.organizations) as { name: string } | null | undefined
+  const orgName = org?.name ?? 'tu empresa'
 
-  const [screen, setScreen] = useState("landing");
-  const [mode, setMode] = useState<string | null>(null);
-  const [step, setStep] = useState(1);
-  const [subPhase, setSubPhase] = useState<string | null>(null);
-  const [formC, setFormC] = useState<any>(initCrear);
-  const [formL, setFormL] = useState<any>(mkInitLevantar());
-  const [aiPredictions, setAiPredictions] = useState<any>({});
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState("");
-  const [viewingProfile, setViewingProfile] = useState<any>(null);
-  const [showPdf, setShowPdf] = useState(false);
-  const [pendingDraft, setPendingDraft] = useState<any>(null);
-  const topRef = useRef<HTMLDivElement>(null);
-  const resRef = useRef<HTMLDivElement>(null);
+  const metrics = orgId
+    ? await fetchMetrics(supabase, orgId)
+    : { foundationScore: 0, hasKultuDNA: false, positions: 0, vacancies: 0, employees: 0 }
 
-  // Load user and company from Supabase
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUser(data.user);
-        supabase
-          .from('companies')
-          .select('*')
-          .eq('user_id', data.user.id)
-          .single()
-          .then(({ data: compData }) => {
-            if (compData) setCompany(compData);
-            else setCompany({ name: data.user.email, email: data.user.email, role: "user" });
-          });
-      }
-    });
-  }, []);
+  const foundationComplete = metrics.foundationScore >= 100
+  const hasAnyData = metrics.positions > 0 || metrics.employees > 0
 
-  const handleSignOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
-
-  const form = mode === "crear" ? formC : formL;
-  const setForm = mode === "crear" ? setFormC : setFormL;
-  const allFields = mode === "crear" ? fieldsCrear : fieldsLevantar;
-  const grp = allFields.find(g => g.step === step);
-
-  // ─── Draft key por empresa + usuario ──────────────────────────────────
-  const DRAFT_KEY = `kulturh_draft_${company?.id || "guest"}`;
-
-  // ─── Auto-guardado (incluye aiPredictions para no perder IA) ──────────
-  useEffect(() => {
-    if (screen !== "form" || !mode) return;
-    const draft = {
-      mode, step, subPhase, formC, formL,
-      aiPredictions,
-      savedAt: Date.now(),
-    };
-    try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { }
-  }, [formC, formL, step, subPhase, mode, screen, aiPredictions]);
-
-  // ─── Restaurar borrador al montar ─────────────────────────────────────
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (draft.savedAt && Date.now() - draft.savedAt < 86400000) {
-        setPendingDraft(draft);
-      } else {
-        localStorage.removeItem(DRAFT_KEY);
-      }
-    } catch { }
-  }, []);
-
-  const restoreDraft = () => {
-    if (!pendingDraft) return;
-    const d = pendingDraft;
-    setMode(d.mode);
-    setStep(d.step || 1);
-    setSubPhase(d.subPhase || null);
-    if (d.formC) setFormC((prev: any) => ({ ...prev, ...d.formC }));
-    if (d.formL) setFormL((prev: any) => ({ ...prev, ...d.formL }));
-    if (d.aiPredictions) setAiPredictions(d.aiPredictions);
-    setScreen("form");
-    setPendingDraft(null);
-  };
-
-  const discardDraft = () => {
-    setPendingDraft(null);
-    try { localStorage.removeItem(DRAFT_KEY); } catch { }
-  };
-
-  const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { } };
-
-  // ─── Mantener sesión activa cuando el tab vuelve a foco ───────────────
-  const lastRefresh = useRef(Date.now());
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState !== "visible") return;
-      if (Date.now() - lastRefresh.current < 60000) return;
-      lastRefresh.current = Date.now();
-      const supabase = createClient();
-      supabase.auth.getSession().catch(() => { });
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
-
-  useEffect(() => { topRef.current?.scrollIntoView({ behavior: "smooth" }); }, [step, screen, subPhase]);
-  useEffect(() => { if (result) resRef.current?.scrollIntoView({ behavior: "smooth" }); }, [result]);
-
-  const chg = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }));
-
-  const canNext = () => {
-    if (mode === "levantar" && step === 2) {
-      if (subPhase === "prioritize") return formL.essentialFunctions.length > 0;
-      return formL.funciones.some((fn: any) => (fn.raw || fn.desc || "").trim().length > 0);
-    }
-    if (!grp) return false;
-    return grp.fields.filter((f: any) => f.required).every((f: any) => (form[f.key] || "").trim().length > 0);
-  };
-
-  const handleSelect = (m: string) => { setMode(m); setScreen("form"); setStep(1); setSubPhase(null); setPendingDraft(null); };
-  const handleReset = () => {
-    clearDraft();
-    setPendingDraft(null);
-    setScreen("landing"); setMode(null); setStep(1); setSubPhase(null);
-    setFormC(initCrear); setFormL(mkInitLevantar());
-    setAiPredictions({}); setResult(null); setError(""); setViewingProfile(null);
-  };
-
-  // ─── Retry con backoff exponencial ───────────────────────────────────────
-  const withRetry = async (fn: () => Promise<any>, retries = 2, delayMs = 1500): Promise<any> => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try { return await fn(); }
-      catch (err: any) {
-        const isRetryable = ["RATE_LIMIT", "SERVER_ERROR"].includes(err.message);
-        if (!isRetryable || attempt === retries) throw err;
-        console.warn(`[AI] Retry ${attempt + 1}/${retries} en ${delayMs}ms...`);
-        await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
-      }
-    }
-  };
-
-  // ─── Anthropic helper ───────────────────────────────────────
-  const callAnthropic = async (body: any) => {
-    return withRetry(async () => {
-      const res = await fetch("/api/anthropic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        let errType = "API_ERROR";
-        try { const j = await res.json(); errType = j?.error?.type || errType; } catch { }
-        if (res.status === 401) throw new Error("AUTH_ERROR");
-        if (res.status === 404) throw new Error("MODEL_UNAVAILABLE");
-        if (res.status === 429) throw new Error("RATE_LIMIT");
-        if (res.status >= 500) throw new Error("SERVER_ERROR");
-        throw new Error(errType);
-      }
-      return res.json();
-    });
-  };
-
-  const AI_MESSAGES: Record<string, string> = {
-    NO_KEY: "No hay una clave de API configurada. Revisa el archivo .env.",
-    AUTH_ERROR: "La clave de API de IA no es válida o no está activa. Revisa tu consola de Anthropic.",
-    MODEL_UNAVAILABLE: "El modelo de IA no está disponible en tu cuenta. Verifica que tengas créditos activos en console.anthropic.com.",
-    RATE_LIMIT: "Demasiadas solicitudes seguidas. Espera unos segundos e intenta de nuevo.",
-    SERVER_ERROR: "El servidor de IA está temporalmente con problemas. Intenta de nuevo en un momento.",
-    DEFAULT: "No pudimos conectar con la IA. Puedes continuar manualmente.",
-  };
-
-  const getAiErrorMsg = (err: any) => AI_MESSAGES[err.message] || AI_MESSAGES.DEFAULT;
-
-  const predictFields = async () => {
-    setScreen("predicting"); setError("");
-    try {
-      const data = await callAnthropic({
-        messages: [{ role: "user", content: buildPredictPrompt(formC) }],
-      });
-      const raw = data.content?.map((b: any) => b.text || "").join("").trim() || "";
-      const parsed = parseAiJson(raw);
-      setAiPredictions(parsed);
-      const fnArray = Array.isArray(parsed.funciones) ? parsed.funciones : [];
-      const fnTexto = fnArray.map((f: any) => f.desc).join(" | ");
-      setFormC((f: any) => ({
-        ...f, ...parsed,
-        funcionesEstructuradas: fnArray,
-        responsabilidades: fnTexto || parsed.responsabilidades || "",
-      }));
-    } catch (err: any) {
-      console.error("[KultuRH] predictFields:", err.message);
-      setError(getAiErrorMsg(err));
-    } finally {
-      setScreen("form"); setStep(2);
-    }
-  };
-
-  const predictConditions = async () => {
-    setScreen("predicting"); setError("");
-    try {
-      const data = await callAnthropic({
-        messages: [{ role: "user", content: buildConditionsPrompt(formL) }],
-      });
-      const raw = data.content?.map((b: any) => b.text || "").join("").trim() || "";
-      const parsed = parseAiJson(raw);
-      setFormL((f: any) => ({
-        ...f,
-        modalidad: f.modalidad || parsed.modalidad || "",
-        horario: f.horario || parsed.horario || "",
-        viajes: f.viajes || parsed.viajes || "",
-        presupuesto: f.presupuesto || parsed.presupuesto || "",
-        personas: f.personas || parsed.personas || "",
-        impactoOrg: f.impactoOrg || parsed.impactoOrg || "",
-      }));
-      setAiPredictions((p: any) => ({ ...p, ...parsed }));
-    } catch (err: any) {
-      console.error("[KultuRH] predictConditions:", err.message);
-      setError(getAiErrorMsg(err));
-    } finally {
-      setScreen("form"); setStep(3); setSubPhase(null);
-    }
-  };
-
-  const generate = async () => {
-    setScreen("generating"); setError("");
-    try {
-      const fnData = mode === "levantar"
-        ? formL.funciones
-          .filter((fn: any) => (fn.desc || fn.raw || "").trim())
-          .map((fn: any, i: number) => ({
-            ...fn, desc: fn.desc || fn.raw,
-            score: calcScore(fn),
-            isEssential: formL.essentialFunctions.includes(i),
-          }))
-        : null;
-
-      const data = await callAnthropic({
-        messages: [{ role: "user", content: buildFinalPrompt(form, mode!, fnData) }],
-      });
-      const raw = data.content?.map((b: any) => b.text || "").join("").trim() || "";
-      setResult(parseAiJson(raw));
-      setScreen("result");
-      clearDraft();
-    } catch (err: any) {
-      console.error("[KultuRH] generate:", err.message);
-      setError(getAiErrorMsg(err));
-      setScreen("form");
-    }
-  };
-
-  const handleNext = () => {
-    if (mode === "crear" && step === 1) {
-      if (Object.keys(aiPredictions).length === 0) {
-        predictFields();
-      } else {
-        setStep(2);
-      }
-      return;
-    }
-    if (mode === "levantar" && step === 2 && subPhase !== "prioritize") {
-      setSubPhase("prioritize"); return;
-    }
-    if (mode === "levantar" && step === 2 && subPhase === "prioritize") {
-      predictConditions(); return;
-    }
-    if (step < 4) { setStep(s => s + 1); setSubPhase(null); } else { generate(); }
-  };
-
-  const handlePrev = () => {
-    if (mode === "levantar" && step === 2 && subPhase === "prioritize") {
-      setSubPhase(null); return;
-    }
-    if (step === 1) { handleReset(); } else { setStep(s => s - 1); setSubPhase(null); }
-  };
-
-  if (screen === "profile" && viewingProfile) {
-    return (
-      <div style={{ minHeight: "100vh", background: C.bg, fontFamily: FF }} ref={topRef}>
-        <style>{KEYFRAMES}</style>
-        <Nav screen={screen} mode={mode} step={step} onReset={handleReset} company={company} onSignOut={handleSignOut} userEmail={user?.email} onToggleAdmin={() => { setViewingProfile(null); setScreen("admin"); }} />
-        <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 20px" }}>
-          <ProfileViewer item={viewingProfile} onBack={handleReset} />
-        </div>
-      </div>
-    );
+  const greeting = () => {
+    const h = new Date().getHours()
+    if (h < 12) return 'Buenos días'
+    if (h < 18) return 'Buenas tardes'
+    return 'Buenas noches'
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: FF }} ref={topRef}>
-      <style>{KEYFRAMES}</style>
-      <Nav screen={screen} mode={mode} step={step} onReset={handleReset} company={company} onSignOut={handleSignOut} userEmail={user?.email} onToggleAdmin={() => { setViewingProfile(null); setScreen("admin"); setMode(null); }} />
+    <div className="max-w-6xl mx-auto space-y-6">
 
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 20px" }}>
-        {screen === "admin" && (
-          <Suspense fallback={<Spinner label="Cargando panel" sub="Preparando módulo seguro..." />}>
-            <AdminPanel onBack={handleReset} company={company} user={user} />
-          </Suspense>
-        )}
-
-        {screen === "landing" && <Landing onSelect={handleSelect} onViewProfile={(item: any) => { setViewingProfile(item); setScreen("profile"); }} />}
-        {screen === "landing" && pendingDraft && (
-          <DraftRecoveryToast draft={pendingDraft} onRestore={restoreDraft} onDiscard={discardDraft} />
-        )}
-        {screen === "predicting" && <Spinner label="Analizando con IA" sub={`Procesando información del cargo "${(mode === "crear" ? formC : formL).puesto || "..."}"...`} />}
-        {screen === "generating" && <Spinner label="Generando descriptivo formal" sub="Estructurando el descriptivo completo con valoración y banda salarial..." />}
-
-        {screen === "form" && grp && (
-          <div style={{ animation: "fadeIn 0.4s ease" }}>
-            <Stepper current={step} steps={STEPS} subStep={
-              mode === "levantar" && step === 2
-                ? (subPhase === "prioritize" ? "Priorización" : "Captura")
-                : null
-            } />
-
-            {/* AI banner */}
-            {Object.keys(aiPredictions).length > 0 && step > 1 && (
-              <div style={{
-                background: C.secondaryDim, border: `1px solid ${C.secondary}20`,
-                borderRadius: 12, padding: "13px 18px", marginBottom: 20,
-                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <div style={{
-                    width: 28, height: 28, borderRadius: "50%", background: `${C.secondary}15`,
-                    border: `1px solid ${C.secondary}30`, display: "flex",
-                    alignItems: "center", justifyContent: "center", fontSize: 13, color: C.secondary,
-                  }}>✦</div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: C.secondary, marginBottom: 2, fontFamily: FF }}>Contenido pre-completado por IA</div>
-                    <div style={{ fontSize: 13, color: C.textSecondary, fontFamily: FF }}>
-                      Los campos <strong style={{ color: C.secondary }}>✦ IA</strong> fueron generados automáticamente. Edita lo que necesites.
-                    </div>
-                  </div>
-                </div>
-                {mode === "crear" && step === 2 && (
-                  <button
-                    onClick={() => { setAiPredictions({}); predictFields(); }}
-                    style={{
-                      background: "none", border: `1px solid ${C.secondary}40`,
-                      borderRadius: 8, padding: "6px 14px", fontFamily: FF,
-                      fontSize: 12, fontWeight: 600, color: C.secondary,
-                      cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-                    }}>
-                    🔄 Re-analizar
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div style={{
-              background: "#fff", border: `1px solid ${C.border}`,
-              borderRadius: 16, padding: "30px 34px", boxShadow: C.shadow,
-            }}>
-              <div style={{ marginBottom: 26 }}>
-                <h2 style={{ margin: "0 0 6px", fontFamily: FF, fontSize: 22, fontWeight: 700, color: C.text }}>
-                  {subPhase === "prioritize" ? "Selecciona las funciones esenciales" : grp.title}
-                </h2>
-                <div style={{ fontSize: 14, color: C.textSecondary, fontFamily: FF, lineHeight: 1.7 }}>
-                  {subPhase === "prioritize" ? null : grp.subtitle}
-                </div>
-              </div>
-
-              {mode === "levantar" && step === 2 ? (
-                subPhase === "prioritize" ? (
-                  <EssentialPrioritization
-                    funciones={formL.funciones}
-                    essentialFunctions={formL.essentialFunctions}
-                    onChange={(k, v) => setFormL((f: any) => ({ ...f, [k]: v }))}
-                  />
-                ) : (
-                  <FunctionTable
-                    funciones={formL.funciones}
-                    puesto={formL.puesto} area={formL.area}
-                    onChange={(k, v) => setFormL((f: any) => ({ ...f, [k]: v }))}
-                  />
-                )
-              ) : mode === "crear" && step === 2 && Array.isArray(formC.funcionesEstructuradas) && formC.funcionesEstructuradas.length > 0 ? (
-                <FuncionesBloques
-                  funciones={formC.funcionesEstructuradas}
-                  onChange={(k, v) => setFormC((f: any) => ({ ...f, [k]: v }))}
-                />
-              ) : (
-                grp.fields.map((field: any) => {
-                  const isAI = grp.aiStep && !!field.aiKey && Object.keys(aiPredictions).length > 0;
-                  return <Field key={field.key} field={field} value={form[field.key]} onChange={chg} isAI={isAI} />;
-                })
-              )}
-
-              {error && (
-                <div style={{
-                  color: C.error, fontSize: 14, marginBottom: 14, padding: "14px 18px",
-                  background: C.errorDim, borderRadius: 12, border: `1px solid ${C.error}25`,
-                  lineHeight: 1.6, fontFamily: FF,
-                }}>
-                  {error}
-                  <button onClick={() => { setError(""); if (mode === "crear" && step === 1) predictFields(); }}
-                    style={{
-                      display: "block", marginTop: 8, background: "none", border: "none",
-                      color: C.primary, fontFamily: FF, fontSize: 13, fontWeight: 600,
-                      cursor: "pointer", textDecoration: "underline",
-                    }}>Reintentar asistencia</button>
-                </div>
-              )}
-
-              <div style={{
-                display: "flex", justifyContent: "space-between", marginTop: 28,
-                paddingTop: 22, borderTop: `1px solid ${C.borderLight}`,
-              }}>
-                <button onClick={handlePrev} style={{
-                  background: "#fff", border: `2px solid ${C.border}`, color: C.textSecondary,
-                  borderRadius: 10, padding: "11px 22px", fontFamily: FF, fontSize: 14,
-                  fontWeight: 600, cursor: "pointer",
-                }}>
-                  ← {step === 1 ? "Volver" : subPhase === "prioritize" ? "Volver a funciones" : "Anterior"}
-                </button>
-                <button onClick={handleNext} disabled={!canNext()} style={{
-                  background: canNext() ? `linear-gradient(135deg, ${C.primary}, ${C.primaryLight})` : C.surfaceAlt,
-                  border: "none", color: canNext() ? "#fff" : C.textMuted,
-                  borderRadius: 10, padding: "11px 28px", fontFamily: FF, fontSize: 14,
-                  fontWeight: 700, cursor: canNext() ? "pointer" : "not-allowed",
-                  transition: "all 0.2s", boxShadow: canNext() ? `0 4px 12px ${C.primaryGlow}` : "none",
-                }}>
-                  {mode === "crear" && step === 1
-                    ? (Object.keys(aiPredictions).length > 0 ? "Continuar →" : "✦ Analizar con IA →")
-                    : step === 2 && mode === "levantar" && subPhase !== "prioritize" ? "Priorizar funciones →"
-                      : step === 2 && mode === "levantar" && subPhase === "prioritize" ? "✦ Continuar con condiciones →"
-                        : step < 4 ? "Siguiente →" : "✦ Generar descriptivo"}
-                </button>
-              </div>
-            </div>
+      {/* ── Foundation alert banner ── */}
+      {!foundationComplete && (
+        <div className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+            <AlertTriangle size={18} className="text-amber-600" />
           </div>
-        )}
-
-        {screen === "result" && result && (
-          <div ref={resRef}>
-            <Results result={result} form={form} mode={mode!} onReset={handleReset}
-              onOpenPdf={() => setShowPdf(true)} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">Completa Foundation antes de continuar</p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              Architecture y Hiring requieren que el ADN cultural de {orgName} esté configurado.
+            </p>
+            <FoundationProgress score={metrics.foundationScore} />
           </div>
-        )}
-      </div>
-
-      {/* PDF Viewer Overlay */}
-      {showPdf && result && (
-        <Suspense fallback={<Spinner label="Cargando motor PDF" sub="Preparando visualización de alta calidad..." />}>
-          <PDFViewer
-            result={result}
-            form={form}
-            mode={mode!}
-            company={company}
-            onClose={() => setShowPdf(false)}
-          />
-        </Suspense>
+          <Link
+            href="/foundation"
+            className="shrink-0 flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
+          >
+            Completar <ArrowRight size={13} />
+          </Link>
+        </div>
       )}
 
-      {/* AI Assistant Widget */}
-      <AiWidget context={{ screen, mode, step, subPhase, formC, formL }} />
+      {/* ── Header ── */}
+      <div>
+        <h1 className="text-2xl font-bold text-[#1E2A45]">
+          {greeting()}, {orgName} 👋
+        </h1>
+        <p className="text-sm text-slate-400 mt-1">
+          {hasAnyData
+            ? `${metrics.positions} cargos · ${metrics.employees} colaboradores · ${metrics.vacancies} vacantes activas`
+            : 'Comienza configurando el ADN cultural de tu empresa'}
+        </p>
+      </div>
+
+      {/* ── Core modules grid ── */}
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Módulos activos</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Foundation */}
+          <ModuleCard
+            icon={Dna}
+            label="Foundation"
+            subtitle="ADN cultural y valores de la organización"
+            metric={`${metrics.foundationScore}%`}
+            metricLabel="completado"
+            status={foundationComplete ? 'ok' : metrics.foundationScore > 0 ? 'warning' : 'empty'}
+            cta={foundationComplete ? 'Ver KultuDNA' : 'Completar ahora'}
+            ctaHref="/foundation"
+          />
+
+          {/* Architecture */}
+          <ModuleCard
+            icon={Building2}
+            label="Architecture"
+            subtitle="Cargos y perfiles de competencias"
+            metric={metrics.positions}
+            metricLabel={metrics.positions === 1 ? 'cargo' : 'cargos'}
+            status={metrics.positions > 0 ? 'ok' : 'empty'}
+            cta={metrics.positions > 0 ? 'Ver cargos' : 'Crear primer cargo'}
+            ctaHref="/architecture"
+            locked={!foundationComplete}
+          />
+
+          {/* Hiring */}
+          <ModuleCard
+            icon={Briefcase}
+            label="Hiring"
+            subtitle="Vacantes y proceso de selección"
+            metric={metrics.vacancies}
+            metricLabel={metrics.vacancies === 1 ? 'vacante activa' : 'vacantes activas'}
+            status={metrics.vacancies > 0 ? 'ok' : 'empty'}
+            cta="Ver vacantes"
+            ctaHref="/hiring"
+            locked={!foundationComplete}
+          />
+
+          {/* People */}
+          <ModuleCard
+            icon={Users}
+            label="People"
+            subtitle="Colaboradores y estructura de equipo"
+            metric={metrics.employees}
+            metricLabel={metrics.employees === 1 ? 'colaborador' : 'colaboradores'}
+            status={metrics.employees > 0 ? 'ok' : 'empty'}
+            cta="Ver equipo"
+            ctaHref="/people"
+            comingSoon={metrics.employees === 0}
+          />
+        </div>
+      </div>
+
+      {/* ── Coming soon modules ── */}
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-3">Próximas fases</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <ModuleCard icon={TrendingUp} label="Performance" subtitle="Evaluaciones y OKRs" comingSoon />
+          <ModuleCard icon={BookOpen} label="Learning" subtitle="Formación y desarrollo" comingSoon />
+          <ModuleCard icon={BarChart3} label="Analytics" subtitle="Métricas e insights de RH" comingSoon />
+          <ModuleCard icon={Settings} label="Admin" subtitle="Usuarios, roles y empresa" cta="Administrar" ctaHref="/admin" status="ok" metric={undefined} />
+        </div>
+      </div>
+
+      {/* ── Quick actions (only when Foundation is done) ── */}
+      {foundationComplete && (
+        <div className="bg-[#3B6FCA]/5 border border-[#3B6FCA]/15 rounded-2xl p-5">
+          <p className="text-sm font-semibold text-[#1E2A45] mb-3 flex items-center gap-2">
+            <CheckCircle2 size={15} className="text-emerald-500" /> Acciones rápidas
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/architecture" className="flex items-center gap-1.5 bg-[#3B6FCA] text-white text-xs font-semibold px-4 py-2 rounded-xl hover:bg-[#2d5ab8] transition-colors">
+              <Plus size={13} /> Nuevo cargo
+            </Link>
+            <Link href="/hiring" className="flex items-center gap-1.5 bg-white border border-slate-200 text-[#1E2A45] text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <Plus size={13} /> Nueva vacante
+            </Link>
+            <Link href="/foundation" className="flex items-center gap-1.5 bg-white border border-slate-200 text-[#1E2A45] text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-50 transition-colors">
+              <Dna size={13} /> Editar KultuDNA
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── Empty state (no org) ── */}
+      {!orgId && (
+        <div className="text-center py-16">
+          <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+            <Clock size={24} className="text-slate-400" />
+          </div>
+          <p className="text-base font-semibold text-[#1E2A45]">Tu workspace está listo</p>
+          <p className="text-sm text-slate-400 mt-1 mb-6">Configura tu empresa para comenzar a usar los módulos</p>
+          <Link
+            href="/onboarding"
+            className="inline-flex items-center gap-2 bg-[#3B6FCA] text-white text-sm font-semibold px-6 py-3 rounded-xl hover:bg-[#2d5ab8] transition-colors"
+          >
+            Configurar empresa <ArrowRight size={15} />
+          </Link>
+        </div>
+      )}
     </div>
-  );
+  )
 }
