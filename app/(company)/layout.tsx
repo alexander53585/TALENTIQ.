@@ -32,25 +32,17 @@ export default async function CompanyLayout({ children }: { children: React.Reac
   const role = membership?.role ?? 'employee'
 
   return (
-    <>
-      {!membership && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-amber-50 border-b border-amber-200 px-4 py-2 text-center text-sm text-amber-700 font-medium">
-          Tu perfil de empresa está incompleto.{' '}
-          <a href="/onboarding" className="underline font-semibold hover:text-amber-900">
-            Configurar ahora →
-          </a>
-        </div>
-      )}
-      <WorkspaceShell
-        orgName={orgName}
-        plan={plan}
-        userEmail={user.email ?? ''}
-        userRole={role}
-      >
-        <div className={membership ? '' : 'mt-10'}>
-          {children}
-        </div>
-      </WorkspaceShell>
-    </>
+    <WorkspaceShell
+      orgName={orgName}
+      plan={plan}
+      userEmail={user.email ?? ''}
+      userRole={role}
+    >
+      {/* 
+          Banner reubicado al Dashboard para evitar sobremontaje.
+          Solo lo mostramos si no hay membresía.
+      */}
+      {children}
+    </WorkspaceShell>
   )
 }

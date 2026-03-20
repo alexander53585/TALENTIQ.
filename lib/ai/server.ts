@@ -20,7 +20,7 @@ export async function callClaude(
   }
 ) {
   const response = await client.messages.create({
-    model: options?.model ?? 'claude-sonnet-4-5',
+    model: options?.model ?? 'claude-3-5-sonnet-latest',
     max_tokens: options?.maxTokens ?? 2048,
     system: options?.system,
     messages,

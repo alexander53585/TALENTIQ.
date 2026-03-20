@@ -430,29 +430,91 @@ export default function FoundationPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // ── Load existing profile ──────────────────────────────
+  // ── Restore state and handle draft recovery ──────────────────────────
   useEffect(() => {
-    fetch('/api/foundation/profile')
-      .then(r => r.json())
-      .then(({ data }) => {
-        if (!data) return
-        setState(prev => ({
-          ...prev,
-          sector:           data.org_structure?.split('|')[0]?.trim() ?? '',
-          work_mode:        data.work_mode ?? '',
-          digital_maturity: data.digital_maturity ?? '',
-          org_structure:    data.org_structure ?? '',
-          mission:          data.mission ?? '',
-          vision:           data.vision ?? '',
-          purpose:          data.purpose ?? '',
-          value_proposition: data.value_proposition ?? '',
-          key_processes:    data.key_processes ?? [],
-          critical_areas:   data.critical_areas ?? [],
-        }))
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [])
+    const loadData = async () => {
+      try {
+        const res = await fetch('/api/foundation/profile')
+        const { data } = await res.json()
+        
+        // 1. Get database state
+        let dbState: FoundationState = INIT
+        if (data) {
+          const archs = data.org_structure?.split('|').map((s: string) => s.trim()).filter(Boolean) || []
+          dbState = {
+            ...INIT,
+            mission:           data.mission ?? '',
+            vision:           data.vision ?? '',
+            purpose:          data.purpose ?? '',
+            value_proposition: data.value_proposition ?? '',
+            key_processes:    data.key_processes ?? [],
+            critical_areas:   data.critical_areas ?? [],
+            work_mode:        data.work_mode ?? '',
+            digital_maturity: data.digital_maturity ?? '',
+            org_structure:    data.org_structure ?? '',
+            sector:           data.sector ?? '',
+            size:             data.size ?? '',
+            legal_structure:  data.legal_structure ?? '',
+            selectedArchetypes: archs,
+          }
+        }
+
+        // 2. Fetch cardinales and axes to complete the state
+        const [cardRes, axesRes] = await Promise.all([
+          fetch('/api/foundation/cardinales'),
+          fetch('/api/foundation/axes')
+        ])
+        const { data: cards } = await cardRes.json()
+        const { data: axes } = await axesRes.json()
+
+        if (cards?.length > 0) {
+          // Re-map cardinality names to IDs from VALUE_CARDS
+          const selectedVals = cards.map((c: any) => {
+            const match = VALUE_CARDS.find(v => v.name === c.name)
+            return match?.id
+          }).filter(Boolean)
+          dbState.selectedValues = selectedVals
+        }
+
+        if (axes?.length > 0) {
+          const selectedChalls = axes.map((a: any) => {
+            const match = CHALLENGE_CARDS.find(c => c.name === a.name)
+            return match?.id
+          }).filter(Boolean)
+          dbState.selectedChallenges = selectedChalls
+        }
+
+        // 3. Draft check
+        const DRAFT_KEY = `kulturh_foundation_draft_${organizationId}`
+        const rawDraft = localStorage.getItem(DRAFT_KEY)
+        if (rawDraft) {
+          const draft = JSON.parse(rawDraft)
+          // If draft is newer (last 2 hours), ask or auto-restore? 
+          // For now, let's just use DB as source of truth and only allow 
+          // in-session draft if user hasn't saved.
+          // BUT the user says "it doesn't save exactly where you left it".
+          // So we should probably check if there's a 'phase' in there.
+          if (draft.phase) setPhase(draft.phase)
+        }
+
+        setState(dbState)
+      } catch (e) {
+        console.error("Error loading Foundation data:", e)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (organizationId) loadData()
+  }, [organizationId])
+
+  // ── Auto-save phase and unsaved state to draft ───────────────────────
+  useEffect(() => {
+    if (!organizationId || loading) return
+    const DRAFT_KEY = `kulturh_foundation_draft_${organizationId}`
+    const draft = { phase, state, updatedAt: Date.now() }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
+  }, [phase, state, organizationId, loading])
 
   const chg = useCallback((k: keyof FoundationState, v: any) => {
     setState(prev => ({ ...prev, [k]: v }))
@@ -469,7 +531,7 @@ export default function FoundationPage() {
 
   // ── Save helpers ───────────────────────────────────────
   const saveProfile = async () => {
-    await fetch('/api/foundation/profile', {
+    const res = await fetch('/api/foundation/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -482,8 +544,12 @@ export default function FoundationPage() {
         work_mode:        state.work_mode,
         digital_maturity: state.digital_maturity,
         org_structure:    state.selectedArchetypes.join(' | ') || state.org_structure,
+        sector:           state.sector,
+        size:             state.size,
+        legal_structure:  state.legal_structure,
       }),
     })
+    if (!res.ok) throw new Error('Error al guardar perfil')
   }
 
   const saveCardinales = async () => {

@@ -16,18 +16,36 @@ const san = (v: any): string => {
 
 // Attempt to repair and parse potentially malformed JSON from LLM
 export const parseAiJson = (raw: string): any => {
+    // 1. Extract JSON block more robustly
     const match = raw.match(/\{[\s\S]*\}/);
     if (!match) throw new Error("No JSON block found");
     let txt = match[0];
+
+    // 2. Initial cleanup of illegal characters
     txt = txt.replace(/[\x00-\x09\x0B\x0C\x0E-\x1F\x7F]/g, " ");
-    txt = txt.replace(/"([^"]*)"/g, (_, inner) =>
-        `"${inner.replace(/\n/g, " ").replace(/\r/g, "").replace(/\t/g, " ")}"`
-    );
+
+    // 3. Try standard parse
     try { return JSON.parse(txt); } catch (_) { }
-    txt = txt.replace(/:\s*"([\s\S]*?)"/g, (_, v) =>
-        `: "${v.replace(/\n/g, " ").replace(/\r/g, "")}"`
-    );
-    return JSON.parse(txt);
+
+    // 4. Heavy-duty repair for common LLM JSON issues
+    // Remove newlines and tabs inside string values that break JSON.parse
+    // This looks for content between double quotes
+    txt = txt.replace(/"((?:[^"\\]|\\.)*)"/g, (match, content) => {
+        return '"' + content
+            .replace(/\n/g, " ")
+            .replace(/\r/g, "")
+            .replace(/\t/g, " ")
+            .replace(/\\n/g, " ") // Also handle literal \n
+            + '"';
+    });
+
+    // 5. Final attempt
+    try {
+        return JSON.parse(txt);
+    } catch (e: any) {
+        console.error("JSON Repair Failed:", e.message, "Text:", txt.substring(0, 100) + "...");
+        throw new Error(`Error al procesar respuesta: ${e.message}`);
+    }
 };
 
 export const buildPredictPrompt = (f: Record<string, any>): string => `Eres experto en Análisis de Puestos en Latinoamérica.

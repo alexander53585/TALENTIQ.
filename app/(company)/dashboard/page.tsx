@@ -4,6 +4,7 @@ import {
   Dna, Building2, Users, BarChart3, BookOpen,
   AlertTriangle, ArrowRight, Plus, CheckCircle2,
   Clock, Briefcase, TrendingUp, Settings,
+  ShieldCheck,
 } from 'lucide-react'
 
 /* ── helpers ─────────────────────────────────────────── */
@@ -197,6 +198,26 @@ export default async function DashboardPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
+      {/* ── Onboarding alert (replaces the old top fixed bar) ── */}
+      {!orgId && (
+        <div className="flex items-center gap-4 bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+          <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+            <Clock size={18} className="text-amber-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-800">Tu perfil de empresa está incompleto</p>
+            <p className="text-xs text-amber-600 mt-0.5">
+              Configura tu organización para desbloquear todas las funcionalidades de KultuRH.
+            </p>
+          </div>
+          <Link
+            href="/onboarding"
+            className="shrink-0 flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
+          >
+            Configurar ahora <ArrowRight size={13} />
+          </Link>
+        </div>
+      )}
 
       {/* ── Foundation alert banner ── */}
       {!foundationComplete && (
@@ -250,7 +271,7 @@ export default async function DashboardPage() {
 
           {/* Architecture */}
           <ModuleCard
-            icon={Building2}
+            icon={ShieldCheck}
             label="Architecture"
             subtitle="Cargos y perfiles de competencias"
             metric={metrics.positions}
@@ -284,7 +305,7 @@ export default async function DashboardPage() {
             status={metrics.employees > 0 ? 'ok' : 'empty'}
             cta="Ver equipo"
             ctaHref="/people"
-            comingSoon={metrics.employees === 0}
+            comingSoon={false}
           />
         </div>
       </div>

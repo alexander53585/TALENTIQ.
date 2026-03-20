@@ -646,7 +646,7 @@ export default function ArchitecturePage() {
     try {
       const raw = await aiComplete({
         messages: [{ role: "user", content: buildPredictPrompt(formC) }],
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-latest",
         feature: "predict_fields",
       });
       const parsed = parseAiJson(raw);
@@ -671,7 +671,7 @@ export default function ArchitecturePage() {
     try {
       const raw = await aiComplete({
         messages: [{ role: "user", content: buildConditionsPrompt(formL) }],
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-latest",
         feature: "predict_conditions",
       });
       const parsed = parseAiJson(raw);
@@ -710,7 +710,7 @@ export default function ArchitecturePage() {
 
       const raw = await aiComplete({
         messages: [{ role: "user", content: buildFinalPrompt(form, mode!, fnData, kultudna || undefined) }],
-        model: "claude-sonnet-4-5",
+        model: "claude-3-5-sonnet-latest",
         feature: "generate_description",
       });
       setResult(parseAiJson(raw));

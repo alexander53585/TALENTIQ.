@@ -3,15 +3,18 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, Dna, Building2, Users, BarChart3,
-  BookOpen, Settings, ChevronLeft, ChevronRight, X,
+  LayoutDashboard, Dna, Building2, Users, BarChart3, BookOpen,
+  AlertTriangle, ArrowRight, Plus, CheckCircle2,
+  Clock, Briefcase, TrendingUp, Settings,
+  ShieldCheck, ChevronLeft, ChevronRight, X,
 } from 'lucide-react'
 
 const MODULES = [
   { id: 'dashboard', label: 'Dashboard', href: '/dashboard', Icon: LayoutDashboard, available: true },
   { id: 'foundation', label: 'KultuDNA', href: '/foundation', Icon: Dna, available: true },
   { id: 'architecture', label: 'Cargos', href: '/architecture', Icon: Building2, available: true },
-  { id: 'hiring', label: 'Selección', href: '/hiring', Icon: Users, available: false },
+  { id: 'hiring', label: 'Selección', href: '/hiring', Icon: Briefcase, available: true },
+  { id: 'people', label: 'People', href: '/people', Icon: Users, available: true },
   { id: 'performance', label: 'Desempeño', href: '/performance', Icon: BarChart3, available: false },
   { id: 'learning', label: 'Aprendizaje', href: '/learning', Icon: BookOpen, available: false },
 ]

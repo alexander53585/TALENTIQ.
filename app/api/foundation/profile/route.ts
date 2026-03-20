@@ -37,6 +37,7 @@ export async function PUT(req: NextRequest) {
     'mission', 'vision', 'purpose', 'values',
     'value_proposition', 'key_processes', 'critical_areas',
     'kultudna_summary', 'work_mode', 'org_structure', 'digital_maturity',
+    'sector', 'size', 'legal_structure',
   ]
   const patch: Record<string, unknown> = { organization_id: orgId }
   for (const k of allowed) {

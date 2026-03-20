@@ -105,7 +105,7 @@ Responde SOLO con JSON válido:
 
     const raw = await aiComplete({
       messages: [{ role: 'user', content: prompt }],
-      model: 'claude-sonnet-4-5',
+      model: 'claude-3-5-sonnet-latest',
       feature: 'suggest_eval_criteria',
     });
 
