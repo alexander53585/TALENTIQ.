@@ -97,14 +97,22 @@ export default function OnboardingPage() {
         .insert({ user_id: user.id, organization_id: org.id, role: 'owner', scope: 'organization', is_active: true })
       if (memError) throw memError
 
+      // CRÍTICO: Crear el perfil base de la organización para evitar errores de RLS en el futuro
+      await supabase
+        .from('organization_profiles')
+        .insert({ organization_id: org.id, sector })
+
       await supabase.auth.updateUser({ data: { sector } })
 
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {
+      console.error("Onboarding Error:", err)
       const msg = (err.message || '').toLowerCase()
       if (msg.includes('duplicate')) setError('Ya existe una empresa con ese nombre. Intenta con un nombre diferente.')
-      else if (msg.includes('permission denied') || msg.includes('policy')) setError('Error de permisos. Contacta a soporte.')
+      else if (msg.includes('permission denied') || msg.includes('policy')) {
+        setError('Error de seguridad al crear la empresa. Esto suele suceder si ya tienes una sesión activa o una empresa pendiente. Prueba cerrando sesión y volviendo a intentar.')
+      }
       else setError(err.message || 'Error al guardar. Intenta de nuevo.')
     }
     setLoading(false)
