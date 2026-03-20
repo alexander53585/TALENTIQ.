@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { C, FF } from '@/lib/tokens';
 import Link from 'next/link';
+import CandidatePipeline from '@/components/hiring/CandidatePipeline';
 
 export default function VacancyDetailPage({ params }: { params: { id: string } }) {
   const [vacancy, setVacancy] = useState<any>(null);
@@ -10,9 +11,6 @@ export default function VacancyDetailPage({ params }: { params: { id: string } }
   const [error, setError] = useState('');
   const [publishing, setPublishing] = useState(false);
   
-  // Real params are a Promise in Next 15, let's just unwrap it properly via useEffect
-  // but for generic approach, we can just use React.use() or await params in a server component.
-  // We'll wrap fetch in an async call that awaits params manually if needed, or simply pass params.id
   const [resolvedId, setResolvedId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -55,6 +53,25 @@ export default function VacancyDetailPage({ params }: { params: { id: string } }
     }
   };
 
+  const addManualCandidate = async () => {
+    const name = window.prompt("Nombre Completo:");
+    if (!name) return;
+    const email = window.prompt("Email:");
+    if (!email) return;
+
+    try {
+      const res = await fetch(`/api/hiring/vacancies/${resolvedId}/candidates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name: name, email, phone: '', source: 'direct' })
+      });
+      if (!res.ok) alert('Error al agregar');
+      else window.location.reload(); // Quick refresh to update Kanban state naturally
+    } catch(e) {
+      alert(e);
+    }
+  };
+
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center', fontFamily: FF, color: C.textMuted }}>Cargando pipeline...</div>;
   }
@@ -71,8 +88,9 @@ export default function VacancyDetailPage({ params }: { params: { id: string } }
   }
 
   return (
-    <div style={{ fontFamily: FF, maxWidth: 1000, margin: '0 auto', padding: '40px 20px' }}>
+    <div style={{ fontFamily: FF, margin: '0 auto', padding: '40px 20px', maxWidth: 1400 }}>
       
+      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
         <Link href="/hiring" style={{ 
           background: '#fff', border: `1px solid ${C.border}`, color: C.textSecondary,
@@ -91,7 +109,14 @@ export default function VacancyDetailPage({ params }: { params: { id: string } }
           {vacancy.status === 'published' ? 'Publicada activa' : vacancy.status === 'created' ? 'Borrador' : vacancy.status}
         </span>
         
-        <div style={{ marginLeft: 'auto' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 12 }}>
+           <button onClick={addManualCandidate} style={{ 
+             background: '#fff', border: `1px solid ${C.primary}`, color: C.primary,
+             borderRadius: 10, padding: '10px 20px', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FF
+           }}>
+             + Añadir Candidato
+           </button>
+
            {vacancy.status === 'created' && (
              <button onClick={handlePublish} disabled={publishing} style={{ 
                background: publishing ? C.border : 'linear-gradient(135deg, #10B981, #059669)',
@@ -104,24 +129,17 @@ export default function VacancyDetailPage({ params }: { params: { id: string } }
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 24, alignItems: 'start' }}>
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
         
-        {/* Pipeline Column */}
-        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 16, padding: '24px', boxShadow: C.shadow }}>
+        {/* Pipeline Column (Left 80%) */}
+        <div style={{ flex: 1, minWidth: 0, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 16, padding: '24px', boxShadow: C.shadow }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: C.text, marginBottom: 24 }}>Pipeline de Candidatos</h2>
           
-          <div style={{ background: C.surfaceAlt, borderRadius: 12, padding: '40px 24px', textAlign: 'center', border: `1px dashed ${C.borderLight}` }}>
-            <div style={{ fontSize: 32, marginBottom: 16 }}>🧑‍💼</div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 8 }}>Aún no hay candidatos</h3>
-            <p style={{ color: C.textSecondary, fontSize: 14, lineHeight: 1.6, maxWidth: 350, margin: '0 auto' }}>
-              Los candidatos ingresados por los canales de publicación empezarán a listarse aquí con su <strong style={{color: C.primary}}>KultuFit Score</strong> automatizado.
-            </p>
-          </div>
+          <CandidatePipeline vacancyId={resolvedId as string} />
         </div>
 
-        {/* Info Column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {/* Vacancy Data */}
+        {/* Info Column (Right 20%) */}
+        <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 24 }}>
           <div style={{ background: '#F8FAFC', border: `1px solid ${C.border}`, borderRadius: 16, padding: '24px' }}>
              <h3 style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 16, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Estructura de Evaluación</h3>
              <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
