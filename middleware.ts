@@ -30,8 +30,9 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
 
-  // Protect all company routes
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/company')) {
+  // Protect all company workspace routes
+  const companyRoutes = ['/dashboard', '/foundation', '/architecture', '/hiring', '/performance', '/learning', '/admin', '/profile']
+  if (companyRoutes.some(r => pathname.startsWith(r))) {
     if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
