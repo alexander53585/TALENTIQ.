@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { C, FF } from '@/lib/tokens'
 import { useOrganization } from '@/hooks/useOrganization'
 import { ValuesDeck, ArchetypesDeck, ChallengesDeck } from '@/components/foundation/KultuArchetypes'
@@ -645,13 +646,43 @@ export default function FoundationPage() {
         {/* Saved banner */}
         {saved && phase === 4 && (
           <div style={{
-            marginTop: 20, padding: '14px 18px', background: C.successDim,
+            marginTop: 20, background: C.successDim,
             border: `1px solid ${C.success}30`, borderRadius: 12,
-            display: 'flex', alignItems: 'center', gap: 10,
-            fontFamily: FF, fontSize: 14, color: C.success, fontWeight: 600,
+            overflow: 'hidden',
           }}>
-            <span style={{ fontSize: 18 }}>✅</span>
-            Foundation guardado correctamente. Architecture e Hiring ya están disponibles.
+            <div style={{
+              padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10,
+              fontFamily: FF, fontSize: 14, color: C.success, fontWeight: 600,
+            }}>
+              <span style={{ fontSize: 18 }}>✅</span>
+              Foundation guardado correctamente.
+            </div>
+            <div style={{
+              borderTop: `1px solid ${C.success}20`, padding: '14px 18px',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              flexWrap: 'wrap', gap: 12, background: `${C.success}05`,
+            }}>
+              <div>
+                <p style={{ fontFamily: FF, fontSize: 13, fontWeight: 700, color: C.text, margin: '0 0 2px' }}>
+                  🧬 Siguiente paso: generar el KultuDNA
+                </p>
+                <p style={{ fontFamily: FF, fontSize: 12, color: C.textSecondary, margin: 0 }}>
+                  La IA construirá el perfil cultural que usarán todos los módulos del sistema.
+                </p>
+              </div>
+              <Link
+                href="/foundation/kultudna"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: C.primary, color: '#fff',
+                  borderRadius: 10, padding: '10px 18px',
+                  fontFamily: FF, fontSize: 13, fontWeight: 700, textDecoration: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Generar KultuDNA →
+              </Link>
+            </div>
           </div>
         )}
 
