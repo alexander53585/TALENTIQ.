@@ -2,32 +2,32 @@
 
 import { useState, useRef, useEffect, lazy, Suspense } from "react";
 import { C, FF, KEYFRAMES, STEPS, calcScore } from "@/lib/tokens";
-import { Nav, Stepper, Field, Spinner, Tag, ResultCard } from "@/components/kulturh/Atoms";
+import { Stepper, Field, Spinner, Tag, ResultCard } from "@/components/kulturh/Atoms";
 import { FunctionTable, EssentialPrioritization } from "@/components/kulturh/FunctionCard";
 import {
   parseAiJson, buildPredictPrompt, buildConditionsPrompt, buildFinalPrompt,
   saveDesc, loadHistorial, deleteDesc,
   fieldsCrear, fieldsLevantar, initCrear, mkInitLevantar,
 } from "@/lib/prompts";
+import { aiComplete } from "@/lib/ai/claude";
+import { useOrganization } from "@/hooks/useOrganization";
 import AiWidget from "@/components/kulturh/AiWidget";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 
 const PDFViewer = lazy(() => import("@/components/kulturh/PDFViewer"));
 const AdminPanel = lazy(() => import("@/components/kulturh/AdminPanel"));
 
 /* ═══════════════ HISTORIAL ══════════════ */
-function HistorialGallery({ onViewProfile }: { onViewProfile: (item: any) => void }) {
+function HistorialGallery({ onViewProfile, organizationId }: { onViewProfile: (item: any) => void; organizationId?: string }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => { loadHistorial().then(d => { setItems(d); setLoading(false); }); }, []);
+  useEffect(() => { loadHistorial(organizationId).then(d => { setItems(d); setLoading(false); }); }, [organizationId]);
 
   const handleDelete = async (key: string) => {
     setDeleting(key);
-    await deleteDesc(key);
+    await deleteDesc(key, organizationId);
     setItems(p => p.filter(i => i.key !== key));
     setDeleting(null);
   };
@@ -85,6 +85,7 @@ function HistorialGallery({ onViewProfile }: { onViewProfile: (item: any) => voi
                       background: "#fff", border: `1px solid ${C.border}`, color: C.textMuted,
                       borderRadius: 10, padding: "9px 12px", fontFamily: FF, fontSize: 12, cursor: "pointer",
                     }}>{deleting === item.key ? "..." : "🗑"}</button>
+
                   </div>
                 </div>
               )}
@@ -97,7 +98,7 @@ function HistorialGallery({ onViewProfile }: { onViewProfile: (item: any) => voi
 }
 
 /* ═══════════════ LANDING ════════════════ */
-function Landing({ onSelect, onViewProfile }: { onSelect: (id: string) => void; onViewProfile: (item: any) => void }) {
+function Landing({ onSelect, onViewProfile, organizationId }: { onSelect: (id: string) => void; onViewProfile: (item: any) => void; organizationId?: string }) {
   const [hov, setHov] = useState<string | null>(null);
   const cards = [
     {
@@ -177,7 +178,7 @@ function Landing({ onSelect, onViewProfile }: { onSelect: (id: string) => void; 
           </div>
         ))}
       </div>
-      <HistorialGallery onViewProfile={onViewProfile} />
+      <HistorialGallery onViewProfile={onViewProfile} organizationId={organizationId as string | undefined} />
     </div>
   );
 }
@@ -187,12 +188,13 @@ interface ResultsProps {
   result: any;
   form: any;
   mode: string;
+  organizationId?: string;
   onReset: () => void;
   onOpenPdf?: () => void;
 }
-function Results({ result, form, mode, onReset, onOpenPdf }: ResultsProps) {
+function Results({ result, form, mode, organizationId, onReset, onOpenPdf }: ResultsProps) {
   const [saved, setSaved] = useState(false);
-  useEffect(() => { saveDesc(result, form, mode).then(ok => { if (ok) setSaved(true); }); }, []);
+  useEffect(() => { saveDesc(result, form, mode, organizationId).then(ok => { if (ok) setSaved(true); }); }, []);
   const gc = (g: string) => (({ A: C.secondary, B: C.success, C: C.primary, D: C.warn, E: C.error } as any)[g] || C.primary);
   const vc = result.valuacionCargo;
 
@@ -506,10 +508,8 @@ function DraftRecoveryToast({ draft, onRestore, onDiscard }: { draft: any; onRes
 }
 
 /* ═══════════════ MAIN APP ═══════════════ */
-export default function DashboardPage() {
-  const router = useRouter();
-  const [user, setUser] = useState<any>(null);
-  const [company, setCompany] = useState<any>(null);
+export default function ArchitecturePage() {
+  const { organizationId, userId } = useOrganization();
 
   const [screen, setScreen] = useState("landing");
   const [mode, setMode] = useState<string | null>(null);
@@ -526,38 +526,13 @@ export default function DashboardPage() {
   const topRef = useRef<HTMLDivElement>(null);
   const resRef = useRef<HTMLDivElement>(null);
 
-  // Load user and company from Supabase
-  useEffect(() => {
-    const supabase = createClient();
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUser(data.user);
-        supabase
-          .from('companies')
-          .select('*')
-          .eq('user_id', data.user.id)
-          .single()
-          .then(({ data: compData }) => {
-            if (compData) setCompany(compData);
-            else setCompany({ name: data.user.email, email: data.user.email, role: "user" });
-          });
-      }
-    });
-  }, []);
-
-  const handleSignOut = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
-
   const form = mode === "crear" ? formC : formL;
   const setForm = mode === "crear" ? setFormC : setFormL;
   const allFields = mode === "crear" ? fieldsCrear : fieldsLevantar;
   const grp = allFields.find(g => g.step === step);
 
-  // ─── Draft key por empresa + usuario ──────────────────────────────────
-  const DRAFT_KEY = `kulturh_draft_${company?.id || "guest"}`;
+  // ─── Draft key por organización ───────────────────────────────────────
+  const DRAFT_KEY = `kulturh_draft_${organizationId || userId || "guest"}`;
 
   // ─── Auto-guardado (incluye aiPredictions para no perder IA) ──────────
   useEffect(() => {
@@ -604,19 +579,6 @@ export default function DashboardPage() {
 
   const clearDraft = () => { try { localStorage.removeItem(DRAFT_KEY); } catch { } };
 
-  // ─── Mantener sesión activa cuando el tab vuelve a foco ───────────────
-  const lastRefresh = useRef(Date.now());
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (document.visibilityState !== "visible") return;
-      if (Date.now() - lastRefresh.current < 60000) return;
-      lastRefresh.current = Date.now();
-      const supabase = createClient();
-      supabase.auth.getSession().catch(() => { });
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
 
   useEffect(() => { topRef.current?.scrollIntoView({ behavior: "smooth" }); }, [step, screen, subPhase]);
   useEffect(() => { if (result) resRef.current?.scrollIntoView({ behavior: "smooth" }); }, [result]);
@@ -641,58 +603,15 @@ export default function DashboardPage() {
     setAiPredictions({}); setResult(null); setError(""); setViewingProfile(null);
   };
 
-  // ─── Retry con backoff exponencial ───────────────────────────────────────
-  const withRetry = async (fn: () => Promise<any>, retries = 2, delayMs = 1500): Promise<any> => {
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try { return await fn(); }
-      catch (err: any) {
-        const isRetryable = ["RATE_LIMIT", "SERVER_ERROR"].includes(err.message);
-        if (!isRetryable || attempt === retries) throw err;
-        console.warn(`[AI] Retry ${attempt + 1}/${retries} en ${delayMs}ms...`);
-        await new Promise(r => setTimeout(r, delayMs * (attempt + 1)));
-      }
-    }
-  };
-
-  // ─── Anthropic helper ───────────────────────────────────────
-  const callAnthropic = async (body: any) => {
-    return withRetry(async () => {
-      const res = await fetch("/api/anthropic", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        let errType = "API_ERROR";
-        try { const j = await res.json(); errType = j?.error?.type || errType; } catch { }
-        if (res.status === 401) throw new Error("AUTH_ERROR");
-        if (res.status === 404) throw new Error("MODEL_UNAVAILABLE");
-        if (res.status === 429) throw new Error("RATE_LIMIT");
-        if (res.status >= 500) throw new Error("SERVER_ERROR");
-        throw new Error(errType);
-      }
-      return res.json();
-    });
-  };
-
-  const AI_MESSAGES: Record<string, string> = {
-    NO_KEY: "No hay una clave de API configurada. Revisa el archivo .env.",
-    AUTH_ERROR: "La clave de API de IA no es válida o no está activa. Revisa tu consola de Anthropic.",
-    MODEL_UNAVAILABLE: "El modelo de IA no está disponible en tu cuenta. Verifica que tengas créditos activos en console.anthropic.com.",
-    RATE_LIMIT: "Demasiadas solicitudes seguidas. Espera unos segundos e intenta de nuevo.",
-    SERVER_ERROR: "El servidor de IA está temporalmente con problemas. Intenta de nuevo en un momento.",
-    DEFAULT: "No pudimos conectar con la IA. Puedes continuar manualmente.",
-  };
-
-  const getAiErrorMsg = (err: any) => AI_MESSAGES[err.message] || AI_MESSAGES.DEFAULT;
-
+  // ─── AI helpers — proxy via /api/ai, never calls Anthropic directly ──────
   const predictFields = async () => {
     setScreen("predicting"); setError("");
     try {
-      const data = await callAnthropic({
+      const raw = await aiComplete({
         messages: [{ role: "user", content: buildPredictPrompt(formC) }],
+        model: "claude-sonnet-4-5",
+        feature: "predict_fields",
       });
-      const raw = data.content?.map((b: any) => b.text || "").join("").trim() || "";
       const parsed = parseAiJson(raw);
       setAiPredictions(parsed);
       const fnArray = Array.isArray(parsed.funciones) ? parsed.funciones : [];
@@ -703,8 +622,8 @@ export default function DashboardPage() {
         responsabilidades: fnTexto || parsed.responsabilidades || "",
       }));
     } catch (err: any) {
-      console.error("[KultuRH] predictFields:", err.message);
-      setError(getAiErrorMsg(err));
+      console.error("[Architecture] predictFields:", err.message);
+      setError(err.message || "No pudimos conectar con la IA. Puedes continuar manualmente.");
     } finally {
       setScreen("form"); setStep(2);
     }
@@ -713,10 +632,11 @@ export default function DashboardPage() {
   const predictConditions = async () => {
     setScreen("predicting"); setError("");
     try {
-      const data = await callAnthropic({
+      const raw = await aiComplete({
         messages: [{ role: "user", content: buildConditionsPrompt(formL) }],
+        model: "claude-sonnet-4-5",
+        feature: "predict_conditions",
       });
-      const raw = data.content?.map((b: any) => b.text || "").join("").trim() || "";
       const parsed = parseAiJson(raw);
       setFormL((f: any) => ({
         ...f,
@@ -729,8 +649,8 @@ export default function DashboardPage() {
       }));
       setAiPredictions((p: any) => ({ ...p, ...parsed }));
     } catch (err: any) {
-      console.error("[KultuRH] predictConditions:", err.message);
-      setError(getAiErrorMsg(err));
+      console.error("[Architecture] predictConditions:", err.message);
+      setError(err.message || "No pudimos conectar con la IA. Puedes continuar manualmente.");
     } finally {
       setScreen("form"); setStep(3); setSubPhase(null);
     }
@@ -749,16 +669,17 @@ export default function DashboardPage() {
           }))
         : null;
 
-      const data = await callAnthropic({
+      const raw = await aiComplete({
         messages: [{ role: "user", content: buildFinalPrompt(form, mode!, fnData) }],
+        model: "claude-sonnet-4-5",
+        feature: "generate_description",
       });
-      const raw = data.content?.map((b: any) => b.text || "").join("").trim() || "";
       setResult(parseAiJson(raw));
       setScreen("result");
       clearDraft();
     } catch (err: any) {
-      console.error("[KultuRH] generate:", err.message);
-      setError(getAiErrorMsg(err));
+      console.error("[Architecture] generate:", err.message);
+      setError(err.message || "No pudimos conectar con la IA. Puedes continuar manualmente.");
       setScreen("form");
     }
   };
@@ -790,9 +711,7 @@ export default function DashboardPage() {
 
   if (screen === "profile" && viewingProfile) {
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, fontFamily: FF }} ref={topRef}>
-        <style>{KEYFRAMES}</style>
-        <Nav screen={screen} mode={mode} step={step} onReset={handleReset} company={company} onSignOut={handleSignOut} userEmail={user?.email} onToggleAdmin={() => { setViewingProfile(null); setScreen("admin"); }} />
+      <div style={{ fontFamily: FF }} ref={topRef}>
         <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 20px" }}>
           <ProfileViewer item={viewingProfile} onBack={handleReset} />
         </div>
@@ -801,18 +720,17 @@ export default function DashboardPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: FF }} ref={topRef}>
+    <div style={{ fontFamily: FF }} ref={topRef}>
       <style>{KEYFRAMES}</style>
-      <Nav screen={screen} mode={mode} step={step} onReset={handleReset} company={company} onSignOut={handleSignOut} userEmail={user?.email} onToggleAdmin={() => { setViewingProfile(null); setScreen("admin"); setMode(null); }} />
 
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 20px" }}>
         {screen === "admin" && (
           <Suspense fallback={<Spinner label="Cargando panel" sub="Preparando módulo seguro..." />}>
-            <AdminPanel onBack={handleReset} company={company} user={user} />
+            <AdminPanel onBack={handleReset} />
           </Suspense>
         )}
 
-        {screen === "landing" && <Landing onSelect={handleSelect} onViewProfile={(item: any) => { setViewingProfile(item); setScreen("profile"); }} />}
+        {screen === "landing" && <Landing onSelect={handleSelect} onViewProfile={(item: any) => { setViewingProfile(item); setScreen("profile"); }} organizationId={organizationId ?? undefined} />}
         {screen === "landing" && pendingDraft && (
           <DraftRecoveryToast draft={pendingDraft} onRestore={restoreDraft} onDiscard={discardDraft} />
         )}
@@ -948,7 +866,7 @@ export default function DashboardPage() {
 
         {screen === "result" && result && (
           <div ref={resRef}>
-            <Results result={result} form={form} mode={mode!} onReset={handleReset}
+            <Results result={result} form={form} mode={mode!} organizationId={organizationId ?? undefined} onReset={handleReset}
               onOpenPdf={() => setShowPdf(true)} />
           </div>
         )}
@@ -961,7 +879,6 @@ export default function DashboardPage() {
             result={result}
             form={form}
             mode={mode!}
-            company={company}
             onClose={() => setShowPdf(false)}
           />
         </Suspense>

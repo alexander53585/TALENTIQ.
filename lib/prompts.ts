@@ -120,12 +120,19 @@ Esquema requerido (reemplaza los valores de ejemplo):
 CRITICO: puntajeTotal = suma exacta de los 5 puntajes. Grado: A=80-100 B=65-79 C=50-64 D=35-49 E=20-34.`;
 };
 
-/* ═══════════════ STORAGE ═══════════════ */
-export const saveDesc = async (result: any, form: any, mode: string): Promise<boolean> => {
+/* ═══════════════ STORAGE — multi-tenant ═══════════════
+   All Supabase ops scoped to organization_id.
+   Falls back to localStorage when Supabase unavailable.
+══════════════════════════════════════════════════════ */
+export const saveDesc = async (
+    result: any,
+    form: any,
+    mode: string,
+    organizationId?: string
+): Promise<boolean> => {
     try {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
-        const userId = user?.id;
 
         const k = `kulturh:${mode}:${Date.now()}`;
         const record = {
@@ -140,54 +147,48 @@ export const saveDesc = async (result: any, form: any, mode: string): Promise<bo
             createdAt: new Date().toISOString(), result,
         };
 
-        // Try Supabase first if user is logged in
-        if (userId) {
+        if (user?.id && organizationId) {
             try {
-                await supabase.from('descriptivos').insert({
-                    user_id: userId,
-                    key: k,
-                    mode,
-                    puesto: form.puesto,
-                    area: form.area,
-                    data: record,
+                await supabase.from('job_positions').insert({
+                    organization_id: organizationId,
+                    user_id: user.id,
+                    key: k, mode,
+                    puesto: form.puesto, area: form.area,
+                    status: 'completed', data: record,
                 });
-            } catch (_) {
-                // Fall back to localStorage
-            }
+            } catch (_) { /* fall through to localStorage */ }
         }
 
-        // Always save to localStorage as fallback
         localStorage.setItem(k, JSON.stringify(record));
         return true;
     } catch { return false; }
 };
 
-export const loadHistorial = async (): Promise<any[]> => {
+export const loadHistorial = async (organizationId?: string): Promise<any[]> => {
     try {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
-        // Try Supabase first
-        if (user?.id) {
+        if (user?.id && organizationId) {
             try {
                 const { data } = await supabase
-                    .from('descriptivos')
+                    .from('job_positions')
                     .select('data')
-                    .eq('user_id', user.id)
+                    .eq('organization_id', organizationId)
+                    .eq('status', 'completed')
                     .order('created_at', { ascending: false });
+
                 if (data && data.length > 0) {
                     return data.map((r: any) => r.data).sort((a: any, b: any) => b.id - a.id);
                 }
-            } catch (_) {
-                // Fall back to localStorage
-            }
+            } catch (_) { /* fall through to localStorage */ }
         }
 
         // localStorage fallback
         const items: any[] = [];
         for (let i = 0; i < localStorage.length; i++) {
             const k = localStorage.key(i);
-            if (k && k.startsWith("kulturh:")) {
+            if (k && (k.startsWith("kulturh:crear:") || k.startsWith("kulturh:levantar:"))) {
                 const r = localStorage.getItem(k);
                 if (r) items.push({ ...JSON.parse(r), key: k });
             }
@@ -196,15 +197,22 @@ export const loadHistorial = async (): Promise<any[]> => {
     } catch { return []; }
 };
 
-export const deleteDesc = async (k: string): Promise<boolean> => {
+export const deleteDesc = async (k: string, organizationId?: string): Promise<boolean> => {
     try {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
-        if (user?.id) {
+
+        if (user?.id && organizationId) {
             try {
-                await supabase.from('descriptivos').delete().eq('key', k).eq('user_id', user.id);
+                await supabase
+                    .from('job_positions')
+                    .delete()
+                    .eq('key', k)
+                    .eq('organization_id', organizationId)
+                    .eq('user_id', user.id);
             } catch (_) { }
         }
+
         localStorage.removeItem(k);
         return true;
     } catch { return false; }
