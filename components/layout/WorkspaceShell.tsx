@@ -17,6 +17,9 @@ export default function WorkspaceShell({
 }: WorkspaceShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [simulatedRole, setSimulatedRole] = useState<string | null>(null)
+
+  const activeRole = simulatedRole || userRole
 
   return (
     <div className="flex min-h-screen bg-[#F0F3FA]">
@@ -25,7 +28,7 @@ export default function WorkspaceShell({
         onCollapse={setCollapsed}
         mobileOpen={mobileOpen}
         onMobileClose={() => setMobileOpen(false)}
-        role={userRole}
+        role={activeRole}
       />
       <div className="flex flex-col flex-1 min-w-0">
         <Header
@@ -33,6 +36,8 @@ export default function WorkspaceShell({
           plan={plan}
           userEmail={userEmail}
           userRole={userRole}
+          activeRole={activeRole}
+          onSimulateRole={setSimulatedRole}
           onMenuClick={() => setMobileOpen(true)}
         />
         <main className="flex-1 p-4 md:p-6 overflow-auto">
