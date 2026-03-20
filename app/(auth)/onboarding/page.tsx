@@ -1,0 +1,131 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+
+const C = {
+  bg: '#F7F9FC', border: '#D8E1EB', borderLight: '#E8EDF3',
+  primary: '#3366FF', primaryLight: '#5580FF',
+  primaryGlow: 'rgba(51,102,255,0.15)',
+  error: '#D94A4A', errorDim: 'rgba(217,74,74,0.08)',
+  text: '#182230', textSecondary: '#5B6B7F', textMuted: '#8FA3C0',
+  surfaceAlt: '#F1F5F9',
+  shadow: '0 1px 3px rgba(24,34,48,0.06)',
+  shadowMd: '0 4px 12px rgba(24,34,48,0.07), 0 2px 4px rgba(24,34,48,0.04)',
+}
+const FF = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+const KEYFRAMES = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box}::placeholder{color:#8FA3C0}@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`
+
+const SECTORS = [
+  'Tecnología', 'Salud', 'Finanzas y Banca', 'Manufactura',
+  'Retail y Comercio', 'Educación', 'Consultoría', 'Gobierno', 'Otros',
+]
+
+function AuthInput({ label, value, onChange, placeholder, required, icon }: {
+  label: string; value: string; onChange: (v: string) => void
+  placeholder: string; required?: boolean; icon?: string
+}) {
+  const [focused, setFocused] = useState(false)
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <label style={{ fontSize: 13, color: C.text, fontFamily: FF, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+        {label}{required && <span style={{ color: C.error, marginLeft: 2 }}> *</span>}
+      </label>
+      <div style={{ position: 'relative' }}>
+        {icon && <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 16, color: focused ? C.primary : C.textMuted, transition: 'color 0.2s' }}>{icon}</span>}
+        <input
+          type="text" value={value} onChange={e => onChange(e.target.value)}
+          placeholder={placeholder} required={required}
+          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1.5px solid ${focused ? C.primary : C.border}`, boxShadow: focused ? `0 0 0 3px ${C.primaryGlow}` : C.shadow, borderRadius: 10, color: C.text, fontFamily: FF, fontSize: 15, padding: icon ? '13px 16px 13px 42px' : '13px 16px', outline: 'none', transition: 'all 0.2s', lineHeight: 1.5 }}
+        />
+      </div>
+    </div>
+  )
+}
+
+export default function OnboardingPage() {
+  const router = useRouter()
+  const [companyName, setCompanyName] = useState('')
+  const [sector, setSector] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    setError(''); setLoading(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Sin sesión activa')
+
+      // Generar slug a partir del nombre
+      const slug = companyName.toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        + '-' + Math.random().toString(36).slice(2, 6)
+
+      // Crear organización
+      const { data: org, error: orgError } = await supabase
+        .from('organizations')
+        .insert({ name: companyName, slug, plan: 'free' })
+        .select()
+        .single()
+      if (orgError) throw orgError
+
+      // Crear membresía como owner
+      const { error: memError } = await supabase
+        .from('user_memberships')
+        .insert({ user_id: user.id, organization_id: org.id, role: 'owner', scope: 'organization', is_active: true })
+      if (memError) throw memError
+
+      // Guardar sector en metadata de usuario
+      await supabase.auth.updateUser({ data: { sector } })
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err: any) {
+      const msg = (err.message || '').toLowerCase()
+      if (msg.includes('permission denied') || msg.includes('policy')) setError('No tenemos permiso para crear tu perfil (Error de RLS). Contacta a soporte.')
+      else if (msg.includes('duplicate')) setError('Esta empresa ya parece estar registrada.')
+      else setError(err.message || 'Error al guardar el perfil de empresa. Intenta de nuevo.')
+    }
+    setLoading(false)
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FF, padding: '40px 0' }}>
+      <style>{KEYFRAMES}</style>
+      <div style={{ width: '100%', maxWidth: 440, padding: '0 20px', animation: 'fadeIn 0.5s ease' }}>
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 16, padding: '34px 30px', boxShadow: C.shadowMd, textAlign: 'center' }}>
+          <div style={{ width: 52, height: 52, borderRadius: 14, margin: '0 auto 16px', background: `linear-gradient(135deg, ${C.primary}, ${C.primaryLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#fff', fontWeight: 700, boxShadow: `0 6px 20px ${C.primaryGlow}` }}>👋</div>
+          <h2 style={{ margin: '0 0 8px', fontFamily: FF, fontSize: 24, fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>¡Te damos la bienvenida!</h2>
+          <p style={{ fontSize: 15, color: C.textSecondary, margin: '0 0 28px', lineHeight: 1.6 }}>
+            Solo necesitamos un par de datos para personalizar tu espacio de trabajo.
+          </p>
+
+          {error && <div style={{ background: C.errorDim, border: `1px solid ${C.error}25`, borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, color: C.error, fontFamily: FF, lineHeight: 1.5 }}>{error}</div>}
+
+          <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
+            <AuthInput label="¿Cómo se llama tu empresa?" value={companyName} onChange={setCompanyName} placeholder="Ej. Grupo Empresarial XYZ" required icon="🏢" />
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ fontSize: 13, color: C.text, fontFamily: FF, fontWeight: 600, display: 'block', marginBottom: 6 }}>
+                ¿A qué sector pertenece? <span style={{ color: C.error }}>*</span>
+              </label>
+              <select value={sector} onChange={e => setSector(e.target.value)} required style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1.5px solid ${C.border}`, borderRadius: 10, color: sector ? C.text : C.textMuted, fontFamily: FF, fontSize: 15, padding: '13px 16px', outline: 'none', cursor: 'pointer', appearance: 'none', boxShadow: C.shadow, backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%235B6B7F' d='M6 8L1 3h10z'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 16px center' }}>
+                <option value="">— Seleccionar sector —</option>
+                {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <button type="submit" disabled={loading} style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, background: loading ? C.surfaceAlt : `linear-gradient(135deg, ${C.primary}, ${C.primaryLight})`, border: 'none', color: loading ? C.textMuted : '#fff', borderRadius: 10, padding: '12px', fontFamily: FF, fontSize: 15, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer', boxShadow: loading ? 'none' : `0 4px 14px ${C.primaryGlow}`, transition: 'all 0.2s' }}>
+              {loading ? <span style={{ display: 'inline-block', animation: 'spin 1s linear infinite' }}>⟳</span> : 'Finalizar configuración →'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  )
+}
