@@ -6,9 +6,11 @@ import { Stepper, Field, Spinner, Tag, ResultCard } from "@/components/kulturh/A
 import { FunctionTable, EssentialPrioritization } from "@/components/kulturh/FunctionCard";
 import {
   parseAiJson, buildPredictPrompt, buildConditionsPrompt, buildFinalPrompt,
-  saveDesc, loadHistorial, deleteDesc,
+  saveDesc, loadHistorial, deleteDesc, updateKultvalue,
   fieldsCrear, fieldsLevantar, initCrear, mkInitLevantar,
 } from "@/lib/prompts";
+import KultuValueForm, { KultuValueResult, KultuValueFactors } from "@/components/architecture/KultuValueForm";
+import { getKultuDNA } from "@/lib/ai/kultudna";
 import { aiComplete } from "@/lib/ai/claude";
 import { useOrganization } from "@/hooks/useOrganization";
 import AiWidget from "@/components/kulturh/AiWidget";
@@ -191,10 +193,11 @@ interface ResultsProps {
   organizationId?: string;
   onReset: () => void;
   onOpenPdf?: () => void;
+  onSaved?: (key: string) => void;
 }
-function Results({ result, form, mode, organizationId, onReset, onOpenPdf }: ResultsProps) {
+function Results({ result, form, mode, organizationId, onReset, onOpenPdf, onSaved }: ResultsProps) {
   const [saved, setSaved] = useState(false);
-  useEffect(() => { saveDesc(result, form, mode, organizationId).then(ok => { if (ok) setSaved(true); }); }, []);
+  useEffect(() => { saveDesc(result, form, mode, organizationId).then(key => { if (key) { setSaved(true); onSaved?.(key); } }); }, []);
   const gc = (g: string) => (({ A: C.secondary, B: C.success, C: C.primary, D: C.warn, E: C.error } as any)[g] || C.primary);
   const vc = result.valuacionCargo;
 
@@ -313,6 +316,35 @@ function Results({ result, form, mode, organizationId, onReset, onOpenPdf }: Res
               </div>
             </div>
           )}
+        </ResultCard>
+      )}
+
+      {result.specific_competencies?.length > 0 && (
+        <ResultCard title="Taxonomía de competencias (N1–N5)" icon="🎯">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 10 }}>
+            {result.specific_competencies.map((c: any, i: number) => {
+              const N_LABELS = ["", "Básico", "En desarrollo", "Competente", "Avanzado", "Experto"];
+              const N_COLORS = ["", C.textMuted, "#3B82F6", C.primary, C.secondary, C.success];
+              const col = N_COLORS[c.level] || C.primary;
+              return (
+                <div key={i} style={{ background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontFamily: FF }}>{c.name}</span>
+                    <span style={{
+                      fontSize: 11, fontWeight: 700, color: col, fontFamily: FF,
+                      background: `${col}15`, borderRadius: 6, padding: "2px 8px",
+                    }}>N{c.level} · {N_LABELS[c.level]}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.textSecondary, lineHeight: 1.55, fontFamily: FF, marginBottom: 4 }}>{c.definition}</div>
+                  {c.observable_behavior && (
+                    <div style={{ fontSize: 11, color: C.textMuted, fontStyle: "italic", fontFamily: FF, lineHeight: 1.5 }}>
+                      {c.observable_behavior}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </ResultCard>
       )}
 
@@ -523,6 +555,10 @@ export default function ArchitecturePage() {
   const [viewingProfile, setViewingProfile] = useState<any>(null);
   const [showPdf, setShowPdf] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<any>(null);
+  const [kultvalue, setKultvalue] = useState<KultuValueResult | null>(null);
+  const [kvInitial, setKvInitial] = useState<KultuValueFactors | undefined>(undefined);
+  const [kvSuggesting, setKvSuggesting] = useState(false);
+  const [savedKey, setSavedKey] = useState<string | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const resRef = useRef<HTMLDivElement>(null);
 
@@ -601,6 +637,7 @@ export default function ArchitecturePage() {
     setScreen("landing"); setMode(null); setStep(1); setSubPhase(null);
     setFormC(initCrear); setFormL(mkInitLevantar());
     setAiPredictions({}); setResult(null); setError(""); setViewingProfile(null);
+    setKultvalue(null); setKvInitial(undefined); setKvSuggesting(false); setSavedKey(null);
   };
 
   // ─── AI helpers — proxy via /api/ai, never calls Anthropic directly ──────
@@ -669,18 +706,46 @@ export default function ArchitecturePage() {
           }))
         : null;
 
+      const kultudna = organizationId ? await getKultuDNA(organizationId) : "";
+
       const raw = await aiComplete({
-        messages: [{ role: "user", content: buildFinalPrompt(form, mode!, fnData) }],
+        messages: [{ role: "user", content: buildFinalPrompt(form, mode!, fnData, kultudna || undefined) }],
         model: "claude-sonnet-4-5",
         feature: "generate_description",
       });
       setResult(parseAiJson(raw));
+      setKultvalue(null); setKvInitial(undefined);
       setScreen("result");
       clearDraft();
     } catch (err: any) {
       console.error("[Architecture] generate:", err.message);
       setError(err.message || "No pudimos conectar con la IA. Puedes continuar manualmente.");
       setScreen("form");
+    }
+  };
+
+  const handleKultuValueAiSuggest = async () => {
+    if (!result) return;
+    setKvSuggesting(true);
+    try {
+      const res = await fetch("/api/architecture/kultvalue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ result }),
+      });
+      const { factors } = await res.json();
+      if (factors) setKvInitial(factors as KultuValueFactors);
+    } catch (e) {
+      console.error("[KultuValue] AI suggest:", e);
+    } finally {
+      setKvSuggesting(false);
+    }
+  };
+
+  const handleKultuValueSave = async (kv: KultuValueResult) => {
+    setKultvalue(kv);
+    if (savedKey && organizationId) {
+      await updateKultvalue(savedKey, organizationId, kv);
     }
   };
 
@@ -867,7 +932,16 @@ export default function ArchitecturePage() {
         {screen === "result" && result && (
           <div ref={resRef}>
             <Results result={result} form={form} mode={mode!} organizationId={organizationId ?? undefined} onReset={handleReset}
-              onOpenPdf={() => setShowPdf(true)} />
+              onOpenPdf={() => setShowPdf(true)} onSaved={setSavedKey} />
+            <div style={{ marginTop: 24 }}>
+              <KultuValueForm
+                initial={kvInitial}
+                result={result}
+                onSave={handleKultuValueSave}
+                onAiSuggest={handleKultuValueAiSuggest}
+                suggesting={kvSuggesting}
+              />
+            </div>
           </div>
         )}
       </div>

@@ -70,7 +70,7 @@ Sugiere factores: frecuencia(1-5), impacto(1-5 consecuencia si no se hace), comp
 Devuelve UNICAMENTE JSON valido, sin backticks, sin texto adicional:
 {"desc":"funcion reformulada sin comillas dobles internas","freq":4,"impact":3,"complexity":3,"explicacion":"justificacion breve"}`;
 
-export const buildFinalPrompt = (f: Record<string, any>, mode: string, fnData: any[] | null): string => {
+export const buildFinalPrompt = (f: Record<string, any>, mode: string, fnData: any[] | null, kultudna?: string): string => {
     const cavBlock = mode === "levantar" && fnData
         ? "FUNCIONES VALORADAS:\n" + fnData.map((fn, i) =>
             `F${i + 1}: ${san(fn.desc || fn.raw)} | Freq:${fn.freq} Impact:${fn.impact} Complexity:${fn.complexity} Score:${fn.score}${fn.isEssential ? " FUNCION ESENCIAL" : ""}`
@@ -103,10 +103,13 @@ PERFIL OCUPANTE: Educacion: ${san(f.nivelEducacion) || "N/A"} ${san(f.carreraEst
 Habilidades en uso: ${san(f.habilidadesQueUsa) || "N/A"}
 Retos: ${san(f.retosDelPuesto) || "N/A"} | Logros: ${san(f.logrosDestacados) || "N/A"}`;
 
+    const kultudnaBlock = kultudna
+        ? `\nCONTEXTO CULTURAL DE LA ORGANIZACION (KultuDNA):\n${kultudna}\n\nConsidera este ADN cultural al definir las competencias, el perfil y la valoracion del cargo.\n`
+        : "";
+
     return `Eres experto senior en RRHH, Organizacion y Compensaciones. Genera el DESCRIPTIVO FORMAL con VALUACION DE CARGO (Puntos por Factor - adaptacion HAY).
 
-${datos}
-
+${datos}${kultudnaBlock}
 INSTRUCCIONES CRITICAS DE FORMATO:
 1. Devuelve SOLO JSON valido, sin texto antes ni despues, sin backticks
 2. NO uses saltos de linea dentro de los valores de string
@@ -115,9 +118,9 @@ INSTRUCCIONES CRITICAS DE FORMATO:
 5. Todos los strings deben estar en una sola linea
 
 Esquema requerido (reemplaza los valores de ejemplo):
-{"resumenEjecutivo":"parrafo 3-4 lineas como texto continuo sin saltos","misionPuesto":"mision en 2 lineas sin saltos","responsabilidadesClave":[{"numero":1,"titulo":"titulo","descripcion":"formato: verbo+objeto+resultado+finalidad sin saltos","porcentajeTiempo":"20%","esEsencial":true}],"indicadoresExito":[{"kpi":"nombre","descripcion":"descripcion","frecuencia":"Mensual","meta":"valor"}],"perfilIdeal":{"educacion":"formacion","experiencia":"anos y tipo","conocimientosTecnicos":["skill1","skill2","skill3"],"competenciasClave":[{"competencia":"nombre","nivel":"Alto","descripcion":"descripcion"}],"idiomas":"requisito"},"condicionesTrabajo":{"modalidad":"valor","disponibilidadViajes":"valor","presupuesto":"valor","personalACargo":"valor","herramientas":["h1","h2"]},"valuacionCargo":{"metodologia":"Puntos por Factor - Adaptacion HAY","factores":[{"factor":"Conocimientos y Habilidades","descripcion":"descripcion","puntaje":18,"maximo":25},{"factor":"Solucion de Problemas","descripcion":"descripcion","puntaje":14,"maximo":20},{"factor":"Responsabilidad e Impacto","descripcion":"descripcion","puntaje":17,"maximo":25},{"factor":"Condiciones de Trabajo","descripcion":"descripcion","puntaje":6,"maximo":10},{"factor":"Liderazgo y Gestion de Personas","descripcion":"descripcion","puntaje":12,"maximo":20}],"puntajeTotal":67,"puntajeMaximo":100,"gradoCargo":"C","bandaSalarial":{"minimo":"$X000","medio":"$X500","maximo":"$X000","moneda":"USD"},"posicionMercado":"En mercado","justificacionValuacion":"justificacion sin saltos","recomendaciones":["rec1","rec2","rec3"]},"relacionesInternas":[{"area":"area","tipo":"Colabora","descripcion":"descripcion"}],"relacionesExternas":[{"entidad":"entidad","proposito":"proposito"}]}
+{"resumenEjecutivo":"parrafo 3-4 lineas como texto continuo sin saltos","misionPuesto":"mision en 2 lineas sin saltos","responsabilidadesClave":[{"numero":1,"titulo":"titulo","descripcion":"formato: verbo+objeto+resultado+finalidad sin saltos","porcentajeTiempo":"20%","esEsencial":true}],"indicadoresExito":[{"kpi":"nombre","descripcion":"descripcion","frecuencia":"Mensual","meta":"valor"}],"perfilIdeal":{"educacion":"formacion","experiencia":"anos y tipo","conocimientosTecnicos":["skill1","skill2","skill3"],"competenciasClave":[{"competencia":"nombre","nivel":"Alto","descripcion":"descripcion"}],"idiomas":"requisito"},"condicionesTrabajo":{"modalidad":"valor","disponibilidadViajes":"valor","presupuesto":"valor","personalACargo":"valor","herramientas":["h1","h2"]},"valuacionCargo":{"metodologia":"Puntos por Factor - Adaptacion HAY","factores":[{"factor":"Conocimientos y Habilidades","descripcion":"descripcion","puntaje":18,"maximo":25},{"factor":"Solucion de Problemas","descripcion":"descripcion","puntaje":14,"maximo":20},{"factor":"Responsabilidad e Impacto","descripcion":"descripcion","puntaje":17,"maximo":25},{"factor":"Condiciones de Trabajo","descripcion":"descripcion","puntaje":6,"maximo":10},{"factor":"Liderazgo y Gestion de Personas","descripcion":"descripcion","puntaje":12,"maximo":20}],"puntajeTotal":67,"puntajeMaximo":100,"gradoCargo":"C","bandaSalarial":{"minimo":"$X000","medio":"$X500","maximo":"$X000","moneda":"USD"},"posicionMercado":"En mercado","justificacionValuacion":"justificacion sin saltos","recomendaciones":["rec1","rec2","rec3"]},"specific_competencies":[{"name":"nombre competencia","level":3,"definition":"definicion del nivel N3 para este cargo","observable_behavior":"comportamientos observables en este nivel"},{"name":"otra competencia","level":2,"definition":"definicion nivel N2","observable_behavior":"comportamientos observables"}],"relacionesInternas":[{"area":"area","tipo":"Colabora","descripcion":"descripcion"}],"relacionesExternas":[{"entidad":"entidad","proposito":"proposito"}]}
 
-CRITICO: puntajeTotal = suma exacta de los 5 puntajes. Grado: A=80-100 B=65-79 C=50-64 D=35-49 E=20-34.`;
+CRITICO: puntajeTotal = suma exacta de los 5 puntajes. Grado: A=80-100 B=65-79 C=50-64 D=35-49 E=20-34. specific_competencies: incluye 4-6 competencias con nivel N1(Basico) a N5(Experto) segun la exigencia del cargo.`;
 };
 
 /* ═══════════════ STORAGE — multi-tenant ═══════════════
@@ -129,7 +132,7 @@ export const saveDesc = async (
     form: any,
     mode: string,
     organizationId?: string
-): Promise<boolean> => {
+): Promise<string> => {
     try {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -155,12 +158,33 @@ export const saveDesc = async (
                     key: k, mode,
                     puesto: form.puesto, area: form.area,
                     status: 'completed', data: record,
+                    specific_competencies: result?.specific_competencies ?? null,
                 });
             } catch (_) { /* fall through to localStorage */ }
         }
 
         localStorage.setItem(k, JSON.stringify(record));
-        return true;
+        return k;
+    } catch { return ""; }
+};
+
+export const updateKultvalue = async (
+    key: string,
+    organizationId: string,
+    kultvalue: { factors: any; score: number; band: string }
+): Promise<boolean> => {
+    try {
+        const supabase = createClient();
+        const { error } = await supabase
+            .from('job_positions')
+            .update({
+                kultvalue_factors: kultvalue.factors,
+                kultvalue_score: kultvalue.score,
+                kultvalue_band: kultvalue.band,
+            })
+            .eq('key', key)
+            .eq('organization_id', organizationId);
+        return !error;
     } catch { return false; }
 };
 
