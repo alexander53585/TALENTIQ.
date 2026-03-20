@@ -11,7 +11,7 @@ async function getOrgId(supabase: Awaited<ReturnType<typeof createClient>>, user
   return data?.organization_id ?? null
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -19,11 +19,20 @@ export async function GET() {
   const orgId = await getOrgId(supabase, user.id)
   if (!orgId) return NextResponse.json({ data: [] })
 
-  const { data, error } = await supabase
+  // ?approved=true → Hiring: only show approved positions
+  const onlyApproved = new URL(req.url).searchParams.get('approved') === 'true'
+
+  let query = supabase
     .from('job_positions')
     .select('*')
     .eq('organization_id', orgId)
     .order('created_at', { ascending: false })
+
+  if (onlyApproved) {
+    query = query.eq('status', 'approved')
+  }
+
+  const { data, error } = await query
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ data })

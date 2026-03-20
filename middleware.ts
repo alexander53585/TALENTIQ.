@@ -76,6 +76,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/health|auth/callback).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/health|api/16pf/token|auth/callback|16pf/).*)',
   ],
 }
