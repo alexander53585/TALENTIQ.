@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { C, FF } from '@/lib/tokens';
 import CandidateDrawer from '@/components/hiring/CandidateDrawer';
+import DecisionPanel from '@/components/hiring/DecisionPanel';
 
 interface PipelineProps {
   vacancyId: string;
@@ -23,8 +24,8 @@ export default function CandidatePipeline({ vacancyId }: PipelineProps) {
   const [loading, setLoading] = useState(true);
   const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
   const [draggedItem, setDraggedItem] = useState<any>(null);
+  const [showDecisionPanel, setShowDecisionPanel] = useState(false);
 
-  // Load data
   const loadCandidates = async () => {
     try {
       const res = await fetch(`/api/hiring/vacancies/${vacancyId}/candidates`);
@@ -37,16 +38,12 @@ export default function CandidatePipeline({ vacancyId }: PipelineProps) {
     }
   };
 
-  useEffect(() => {
-    loadCandidates();
-  }, [vacancyId]);
+  useEffect(() => { loadCandidates(); }, [vacancyId]);
 
-  // Drag and Drop handlers
   const onDragStart = (e: React.DragEvent, cand: any) => {
     setDraggedItem(cand);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('curr_status', cand.status);
-    // Hide ghost image styling fix
     e.currentTarget.classList.add('dragging');
   };
 
@@ -65,7 +62,6 @@ export default function CandidatePipeline({ vacancyId }: PipelineProps) {
     if (!draggedItem) return;
     if (draggedItem.status === toStatus) return;
 
-    // Optimistic update
     const previousCandidates = [...candidates];
     setCandidates(prev => prev.map(c => c.id === draggedItem.id ? { ...c, status: toStatus } : c));
 
@@ -80,13 +76,37 @@ export default function CandidatePipeline({ vacancyId }: PipelineProps) {
       const updated = await res.json();
       setCandidates(prev => prev.map(c => c.id === updated.id ? { ...c, ...updated } : c));
     } catch (err) {
-      // Rollback
       setCandidates(previousCandidates);
       alert('Error moviendo al candidato.');
     } finally {
       setDraggedItem(null);
     }
   };
+
+  const handleOffer = async (candidateId: string, offerDetails: any) => {
+    try {
+      const res = await fetch(`/api/people/employees`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          candidate_id: candidateId,
+          vacancy_id: vacancyId,
+          hire_date: offerDetails.date,
+          onboarding_notes: offerDetails.notes
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error en Handoff');
+      
+      alert('¡Handoff Exitoso! El candidato ya es Empleado Activo, la vacante se ha cerrado y el resto recibirá feedback automático.');
+      setShowDecisionPanel(false);
+      window.location.reload(); 
+    } catch (e: any) {
+      alert(e.message);
+    }
+  };
+
+  const finalists = candidates.filter(c => c.status === 'finalist');
 
   if (loading) {
     return <div style={{ padding: '40px', textAlign: 'center', color: C.textMuted, fontFamily: FF }}>Cargando pipeline...</div>;
@@ -120,13 +140,20 @@ export default function CandidatePipeline({ vacancyId }: PipelineProps) {
         }
         .card:active { cursor: grabbing; }
         .card.dragging { opacity: 0.5; }
-        
-        /* Drag UI overlay fix for smooth experience */
         .drop-zone { min-height: 60px; border-radius: 8px; border: 2px dashed transparent; transition: all 0.2s; }
         .drop-zone.active { background: rgba(51,102,255,0.05); border-color: ${C.primary}; }
       `}</style>
 
-      {/* Manual Candidate creation btn could be here, mapped externally or via a modal. */}
+      {finalists.length > 0 && (
+        <div style={{ paddingBottom: 24, display: 'flex', justifyContent: 'flex-end', borderBottom: `1px solid ${C.borderLight}`, marginBottom: 24 }}>
+          <button 
+            onClick={() => setShowDecisionPanel(true)}
+            style={{ padding: '10px 20px', background: '#0F172A', color: '#fff', border: 'none', borderRadius: 10, fontWeight: 700, cursor: 'pointer', fontFamily: FF, boxShadow: '0 4px 12px rgba(15,23,42,0.2)' }}
+          >
+            ⚖️ Decision Panel ({finalists.length} Finalistas)
+          </button>
+        </div>
+      )}
 
       <div className="kanban-board">
         {COLUMNS.map(col => {
@@ -190,6 +217,15 @@ export default function CandidatePipeline({ vacancyId }: PipelineProps) {
         candidate={selectedCandidate} 
         onClose={() => setSelectedCandidate(null)} 
       />
+
+      {showDecisionPanel && (
+        <DecisionPanel 
+          vacancyId={vacancyId}
+          finalists={finalists}
+          onClose={() => setShowDecisionPanel(false)}
+          onOffer={handleOffer}
+        />
+      )}
     </>
   );
 }
