@@ -51,7 +51,7 @@ export default function ForgotPasswordPage() {
 
   const getRedirectUrl = () => {
     if (typeof window === 'undefined') return ''
-    return window.location.origin
+    return `${window.location.origin}/auth/callback?next=/reset-password`
   }
 
   const handleSubmit = async (e?: React.FormEvent) => {

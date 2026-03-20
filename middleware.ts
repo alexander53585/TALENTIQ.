@@ -62,11 +62,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  // Reset-password requiere sesión activa (viene del callback de recuperación)
+  if (pathname === '/reset-password' && !user) {
+    return NextResponse.redirect(new URL('/forgot-password', request.url))
+  }
+
   return supabaseResponse
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api/health).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/health|auth/callback).*)',
   ],
 }
