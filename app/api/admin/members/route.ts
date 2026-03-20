@@ -11,7 +11,10 @@ export async function GET() {
   if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
 
   // Obtenemos los miembros de la organización
-  const { data, error } = await supabase
+  // Nota: Hacemos un join indirecto con auth.users si es posible, 
+  // o confiamos en que los emails están en una tabla de perfiles.
+  // Por ahora, traemos los IDs y buscaremos los emails.
+  const { data: memberships, error: memError } = await supabase
     .from('user_memberships')
     .select(`
       id,
@@ -24,7 +27,20 @@ export async function GET() {
     .eq('organization_id', orgId)
     .order('created_at', { ascending: true })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (memError) return NextResponse.json({ error: memError.message }, { status: 500 })
+
+  // Intentamos obtener emails de los perfiles de usuario si existen
+  // Si no, devolvemos lo que tenemos
+  const userIds = memberships.map(m => m.user_id)
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, email')
+    .in('id', userIds)
+
+  const data = memberships.map(m => ({
+    ...m,
+    email: profiles?.find(p => p.id === m.user_id)?.email || 'Usuario'
+  }))
 
   return NextResponse.json({ data })
 }

@@ -28,26 +28,38 @@ export async function POST(request: NextRequest) {
     .limit(1)
     .maybeSingle()
 
-  // 4. Llamar a Claude desde el servidor (API key nunca sale del server)
-  const result = await callClaude(messages, {
-    model,
-    maxTokens,
-    system,
-  })
-
-  // 5. Loguear uso en ai_usage (fire and forget — no bloquea la respuesta)
-  if (membership?.organization_id) {
-    void supabase.from('ai_usage').insert({
-      organization_id: membership.organization_id,
-      user_id: user.id,
-      feature,
-      input_tokens: result.usage?.input_tokens ?? 0,
-      output_tokens: result.usage?.output_tokens ?? 0,
+  try {
+    // 4. Llamar a Claude desde el servidor (API key nunca sale del server)
+    const result = await callClaude(messages, {
+      model,
+      maxTokens,
+      system,
     })
-  }
+    
+    // 5. Loguear uso en ai_usage (fire and forget)
+    // Solo si existe una membresía y un ID de organización válido
+    if (membership?.organization_id) {
+      try {
+        void supabase.from('ai_usage').insert({
+          organization_id: membership.organization_id,
+          user_id: user.id,
+          feature,
+          input_tokens: result.usage?.input_tokens ?? 0,
+          output_tokens: result.usage?.output_tokens ?? 0,
+        })
+      } catch (e) {
+        console.error("[AI Usage Log Error] No se pudo registrar el uso:", e)
+      }
+    }
 
-  return NextResponse.json({
-    content: result.content,
-    usage: result.usage,
-  })
+    return NextResponse.json({
+      content: result.content,
+      usage: result.usage,
+    })
+  } catch (err: any) {
+    console.error("[AI Server Error] Error al llamar a Claude:", err)
+    return NextResponse.json({ 
+      error: err.message || 'Error interno al procesar la solicitud de IA' 
+    }, { status: 500 })
+  }
 }
