@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 
 export default async function CompanyLayout({
@@ -22,18 +23,23 @@ export default async function CompanyLayout({
     .single()
 
   if (!membership) {
-    redirect('/no-access')
+    // Permitir si eligió "configurar más tarde"
+    const cookieStore = await cookies()
+    const skipped = cookieStore.get('onboarding_skip')?.value
+    if (!skipped) {
+      redirect('/onboarding')
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <span className="font-bold text-gray-900 text-lg">KultuRH</span>
-        <span className="text-sm text-gray-500 capitalize">{membership.role}</span>
-      </header>
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        {children}
-      </main>
+    <div style={{ minHeight: '100vh', background: '#F7F9FC' }}>
+      {!membership && (
+        <div style={{ background: '#FFF8E1', borderBottom: '1px solid #FFD54F', padding: '10px 24px', textAlign: 'center', fontSize: 13, color: '#795548', fontFamily: "'Inter', sans-serif" }}>
+          Tu perfil de empresa está incompleto.{' '}
+          <a href="/onboarding" style={{ color: '#3366FF', fontWeight: 600, textDecoration: 'none' }}>Configurar ahora →</a>
+        </div>
+      )}
+      <main>{children}</main>
     </div>
   )
 }
