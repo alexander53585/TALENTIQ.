@@ -210,6 +210,8 @@ export function ArchetypesDeck({
 }
 
 /* ── Challenges Deck ───────────────────────────────── */
+const MAX_CHALLENGES = 5
+
 export function ChallengesDeck({
   selected, onChange, workshopMode,
 }: {
@@ -217,8 +219,15 @@ export function ChallengesDeck({
   onChange: (ids: string[]) => void
   workshopMode?: boolean
 }) {
-  const toggle = (id: string) =>
-    onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id])
+  const atLimit = selected.length >= MAX_CHALLENGES
+
+  const toggle = (id: string) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter(x => x !== id))
+    } else if (!atLimit) {
+      onChange([...selected, id])
+    }
+  }
 
   return (
     <div>
@@ -228,46 +237,52 @@ export function ChallengesDeck({
             Retos estratégicos del período
           </p>
           <p style={{ fontFamily: FF, fontSize: 12, color: C.textMuted, margin: '4px 0 0' }}>
-            Selecciona los retos más relevantes — se convertirán en ejes estratégicos
+            Elige entre 3 y {MAX_CHALLENGES} retos — se convertirán en ejes estratégicos con duración definida
           </p>
         </div>
-        {selected.length > 0 && (
-          <div style={{
-            background: C.primaryDim, border: `1px solid ${C.primary}30`,
-            borderRadius: 20, padding: '4px 14px',
-            fontFamily: FF, fontSize: 13, color: C.primary, fontWeight: 600,
-          }}>
-            {selected.length} ejes definidos
-          </div>
-        )}
+        <div style={{
+          background: atLimit ? C.primaryDim : selected.length >= 3 ? '#f0fdf4' : C.surfaceAlt,
+          border: `1px solid ${atLimit ? C.primary + '40' : selected.length >= 3 ? '#86efac' : C.border}`,
+          borderRadius: 20, padding: '4px 14px',
+          fontFamily: FF, fontSize: 13,
+          color: atLimit ? C.primary : selected.length >= 3 ? '#16a34a' : C.textMuted,
+          fontWeight: 600,
+        }}>
+          {selected.length}/{MAX_CHALLENGES} ejes{atLimit ? ' — límite alcanzado' : ''}
+        </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-        {CHALLENGE_CARDS.map(card => (
-          <FlipCard
-            key={card.id}
-            selected={selected.includes(card.id)}
-            onToggle={() => toggle(card.id)}
-            workshopMode={workshopMode}
-            front={
-              <>
-                <span style={{ fontSize: workshopMode ? 32 : 26 }}>{card.icon}</span>
-                <span style={{ fontFamily: FF, fontSize: 12, fontWeight: 700, color: C.text, textAlign: 'center', lineHeight: 1.3 }}>
-                  {card.name}
-                </span>
-              </>
-            }
-            back={
-              <>
-                <span style={{ fontSize: 20 }}>{card.icon}</span>
-                <p style={{ fontFamily: FF, fontSize: 12, color: C.text, fontWeight: 700, margin: 0 }}>{card.name}</p>
-                <p style={{ fontFamily: FF, fontSize: 11, color: C.textSecondary, margin: 0, lineHeight: 1.6 }}>
-                  {card.description}
-                </p>
-              </>
-            }
-          />
-        ))}
+        {CHALLENGE_CARDS.map(card => {
+          const isSelected = selected.includes(card.id)
+          const isDisabled = atLimit && !isSelected
+          return (
+            <div key={card.id} style={{ opacity: isDisabled ? 0.4 : 1, transition: 'opacity 0.2s', cursor: isDisabled ? 'not-allowed' : 'pointer' }}>
+              <FlipCard
+                selected={isSelected}
+                onToggle={() => toggle(card.id)}
+                workshopMode={workshopMode}
+                front={
+                  <>
+                    <span style={{ fontSize: workshopMode ? 32 : 26 }}>{card.icon}</span>
+                    <span style={{ fontFamily: FF, fontSize: 12, fontWeight: 700, color: C.text, textAlign: 'center', lineHeight: 1.3 }}>
+                      {card.name}
+                    </span>
+                  </>
+                }
+                back={
+                  <>
+                    <span style={{ fontSize: 20 }}>{card.icon}</span>
+                    <p style={{ fontFamily: FF, fontSize: 12, color: C.text, fontWeight: 700, margin: 0 }}>{card.name}</p>
+                    <p style={{ fontFamily: FF, fontSize: 11, color: C.textSecondary, margin: 0, lineHeight: 1.6 }}>
+                      {card.description}
+                    </p>
+                  </>
+                }
+              />
+            </div>
+          )
+        })}
       </div>
     </div>
   )

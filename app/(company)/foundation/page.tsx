@@ -20,6 +20,7 @@ interface FoundationState {
   value_proposition: string; key_processes: string[]; critical_areas: string[]
   // Phase 4
   selectedChallenges: string[]
+  axeDurations: Record<string, string>
 }
 
 const INIT: FoundationState = {
@@ -27,7 +28,16 @@ const INIT: FoundationState = {
   mission: '', vision: '', purpose: '', selectedValues: [], selectedArchetypes: [],
   value_proposition: '', key_processes: [], critical_areas: [],
   selectedChallenges: [],
+  axeDurations: {},
 }
+
+const MAX_AXES = 5
+const DURATION_OPTIONS = [
+  { value: '3m',  label: 'Trimestral (3m)' },
+  { value: '6m',  label: 'Semestral (6m)' },
+  { value: '12m', label: 'Anual (12m)' },
+  { value: '24m', label: 'Bienal (2 años)' },
+]
 
 /* ══════════════════ HELPERS ════════════════════ */
 const PHASES = [
@@ -419,26 +429,56 @@ function Phase4({ state, onChange, workshopMode }: { state: FoundationState; onC
           background: '#fff', border: `1.5px solid ${C.border}`,
           borderRadius: 14, padding: '18px 20px',
         }}>
-          <p style={{ fontFamily: FF, fontSize: 14, fontWeight: 700, color: C.text, margin: '0 0 12px' }}>
-            📋 Ejes estratégicos del período
-          </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+            <p style={{ fontFamily: FF, fontSize: 14, fontWeight: 700, color: C.text, margin: 0 }}>
+              📋 Ejes estratégicos del período
+            </p>
+            <span style={{
+              fontFamily: FF, fontSize: 12, color: C.textMuted, fontWeight: 500,
+              background: C.surfaceAlt, borderRadius: 8, padding: '3px 10px',
+            }}>
+              {state.selectedChallenges.length}/{MAX_AXES} ejes · Define la duración de cada uno
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {state.selectedChallenges.map((id, i) => {
               const card = CHALLENGE_CARDS.find(c => c.id === id)
               if (!card) return null
               return (
-                <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <div style={{
                     width: 24, height: 24, borderRadius: '50%', background: C.primaryDim,
                     border: `1.5px solid ${C.primary}30`, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontFamily: FF, fontSize: 11, fontWeight: 700, color: C.primary, flexShrink: 0,
                   }}>{i + 1}</div>
                   <span style={{ fontSize: 15 }}>{card.icon}</span>
-                  <span style={{ fontFamily: FF, fontSize: 13, fontWeight: 600, color: C.text }}>{card.name}</span>
+                  <span style={{ fontFamily: FF, fontSize: 13, fontWeight: 600, color: C.text, flex: 1, minWidth: 120 }}>{card.name}</span>
+                  <select
+                    value={state.axeDurations[id] ?? ''}
+                    onChange={e => {
+                      const next = { ...state.axeDurations, [id]: e.target.value }
+                      onChange('axeDurations', next)
+                    }}
+                    style={{
+                      fontFamily: FF, fontSize: 12, color: state.axeDurations[id] ? C.text : C.textMuted,
+                      border: `1.5px solid ${C.border}`, borderRadius: 8, padding: '5px 10px',
+                      background: '#fff', outline: 'none', cursor: 'pointer', minWidth: 160,
+                    }}
+                  >
+                    <option value="">Duración del eje…</option>
+                    {DURATION_OPTIONS.map(d => (
+                      <option key={d.value} value={d.value}>{d.label}</option>
+                    ))}
+                  </select>
                 </div>
               )
             })}
           </div>
+          {state.selectedChallenges.some(id => !state.axeDurations[id]) && (
+            <p style={{ fontFamily: FF, fontSize: 11, color: C.textMuted, margin: '12px 0 0', fontStyle: 'italic' }}>
+              💡 Asigna una duración a cada eje para completar tu horizonte estratégico
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -506,11 +546,19 @@ export default function FoundationPage() {
         }
 
         if (axes?.length > 0) {
-          const selectedChalls = axes.map((a: any) => {
+          const seen = new Set<string>()
+          const selectedChalls: string[] = []
+          const durations: Record<string, string> = {}
+          for (const a of axes) {
             const match = CHALLENGE_CARDS.find(c => c.name === a.name)
-            return match?.id
-          }).filter(Boolean)
-          dbState.selectedChallenges = selectedChalls
+            if (match && !seen.has(match.id)) {
+              seen.add(match.id)
+              selectedChalls.push(match.id)
+              if (a.duration) durations[match.id] = a.duration
+            }
+          }
+          dbState.selectedChallenges = selectedChalls.slice(0, MAX_AXES)
+          dbState.axeDurations = durations
         }
 
         // 3. Restore phase from DB (persists across sessions/devices)
@@ -604,7 +652,7 @@ export default function FoundationPage() {
     if (state.selectedChallenges.length === 0) return
     const axes = state.selectedChallenges.map((id, i) => {
       const card = CHALLENGE_CARDS.find(c => c.id === id)!
-      return { name: card.name, description: card.description, priority: i + 1 }
+      return { name: card.name, description: card.description, priority: i + 1, duration: state.axeDurations[id] ?? null }
     })
     for (const a of axes) {
       await fetch('/api/foundation/axes', {
