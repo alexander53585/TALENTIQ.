@@ -37,9 +37,30 @@ const PHASES = [
   { n: 4, label: 'Horizonte',   icon: '🎯' },
 ]
 
-const SECTORS = ['Tecnología', 'Retail & Comercio', 'Manufactura', 'Servicios profesionales', 'Educación', 'Salud', 'Financiero & Fintech', 'Construcción & Real Estate', 'Agro & Alimentos', 'Logística', 'Medios & Entretenimiento', 'Gobierno & Público', 'ONG & Social', 'Otro']
-const SIZES   = ['1–10 personas', '11–50 personas', '51–200 personas', '201–500 personas', '501–1,000 personas', '+1,000 personas']
-const LEGAL   = ['S.A.', 'S.R.L.', 'E.I.R.L.', 'Cooperativa', 'Fundación / ONG', 'Empresa pública', 'Holding', 'Otro']
+const SECTORS = [
+  'Tecnología',
+  'Retail & Comercio',
+  'Manufactura',
+  'Servicios profesionales',
+  'Educación',
+  'Salud',
+  'Financiero & Fintech',
+  'Construcción & Real Estate',
+  'Agro & Alimentos',
+  'Logística',
+  'Medios & Entretenimiento',
+  'Gobierno & Público',
+  'ONG & Social',
+  '— Consultoría —',
+  'Consultoría empresarial (firma)',
+  'Consultoría de RR.HH.',
+  'Consultoría de TI',
+  'Consultoría estratégica',
+  'Consultor independiente / Freelance',
+  'Otro',
+]
+const SIZES   = ['Autónomo / 1 persona', '2–10 personas', '11–50 personas', '51–200 personas', '201–500 personas', '501–1,000 personas', '+1,000 personas']
+const LEGAL   = ['S.A.', 'S.R.L.', 'E.I.R.L.', 'Persona Natural / Autónomo', 'Cooperativa', 'Fundación / ONG', 'Empresa pública', 'Holding', 'Otro']
 const MODES   = ['Presencial', 'Remoto', 'Híbrido (mayoría presencial)', 'Híbrido (mayoría remoto)']
 const DIGITAL = ['Básico — procesos en papel/Excel', 'Intermedio — sistemas parciales', 'Avanzado — sistemas integrados', 'Nativo digital — datos en el centro']
 
@@ -121,7 +142,11 @@ function Select({ label, value, onChange, options, required }: {
         }}
       >
         <option value="">Seleccionar...</option>
-        {options.map(o => <option key={o} value={o}>{o}</option>)}
+        {options.map(o =>
+          o.startsWith('—')
+            ? <option key={o} value="" disabled style={{ color: '#94a3b8', fontStyle: 'italic' }}>{o}</option>
+            : <option key={o} value={o}>{o}</option>
+        )}
       </select>
     </div>
   )

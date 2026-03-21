@@ -18,8 +18,11 @@ const FF = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
 const KEYFRAMES = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box}::placeholder{color:#8FA3C0}@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`
 
 const SECTORS = [
-  'Tecnología', 'Salud', 'Finanzas y Banca', 'Manufactura',
-  'Retail y Comercio', 'Educación', 'Consultoría', 'Gobierno', 'Otros',
+  'Tecnología', 'Salud', 'Financiero & Fintech', 'Manufactura',
+  'Retail & Comercio', 'Educación', 'Gobierno & Público', 'ONG & Social',
+  'Consultoría empresarial (firma)', 'Consultoría de RR.HH.',
+  'Consultoría de TI', 'Consultoría estratégica',
+  'Consultor independiente / Freelance', 'Otros',
 ]
 
 function AuthInput({ label, value, onChange, placeholder, required, icon }: {
