@@ -57,18 +57,32 @@ export default function AiWidget({ context }: AiWidgetProps) {
 
         try {
             // ─── Construcción de Contexto en Tiempo Real ───
-            let sys = `Eres el asistente experto en Recursos Humanos de KultuRH. Tu objetivo es guiar de forma clara, amable y profesional al usuario en la creación de descriptivos y perfiles de puesto. Responde brevemente (máx 2-3 párrafos) usando lenguaje natural. No des formato muy largo.`;
+            let sys = `Eres RAY, el asistente experto en Recursos Humanos de KultuRH. Guías al usuario de forma clara, amable y profesional. Responde brevemente (máx 2-3 párrafos) en lenguaje natural. Sin listas largas ni formato excesivo.`;
 
             if (context.screen === "form") {
-                sys += `\n\nCONTEXTO ACTUAL: El usuario está usando la herramienta en modo "${context.mode}" en el paso ${context.step}.`;
+                sys += `\n\nCONTEXTO: El usuario está diseñando un cargo en modo "${context.mode}", paso ${context.step}.`;
                 const form = context.mode === "crear" ? context.formC : context.formL;
-                if (form?.puesto) sys += ` El título del cargo en curso es: "${form.puesto}".`;
-                if (form?.area) sys += ` Pertenece al área de: "${form.area}".`;
-                if (form?.mision) sys += ` Su misión es: "${form.mision}".`;
+                if (form?.puesto) sys += ` Cargo: "${form.puesto}".`;
+                if (form?.area)   sys += ` Área: "${form.area}".`;
+                if (form?.mision) sys += ` Misión: "${form.mision}".`;
             } else if (context.screen === "result") {
-                sys += `\n\nCONTEXTO ACTUAL: El usuario acaba de generar el resultado final de su descriptivo de puesto, incluyendo la valoración y los perfiles.`;
+                sys += `\n\nCONTEXTO: El usuario está revisando el descriptivo de puesto generado, con valoración KultuValue y banda salarial.`;
             } else if (context.screen === "landing") {
-                sys += `\n\nCONTEXTO ACTUAL: El usuario está en la pantalla principal ("Landing") explorando el historial de cargos o decidiendo si "Crear un cargo nuevo" o "Levantar un cargo existente".`;
+                sys += `\n\nCONTEXTO: El usuario está en la pantalla principal de Arquitectura Organizacional, explorando el historial de cargos o eligiendo entre "Crear" o "Levantar" un cargo.`;
+            } else if (context.screen === "foundation") {
+                sys += `\n\nCONTEXTO: El usuario está completando el módulo Foundation (planificación estratégica y KultuDNA), fase ${context.step} de 4 — "${context.subPhase}".`;
+                if (context.formC?.area)   sys += ` Sector: "${context.formC.area}".`;
+                if (context.formC?.mision) sys += ` Misión/Propósito registrado: "${context.formC.mision}".`;
+                sys += ` Puedes ayudar con misión, visión, valores organizacionales, arquetipos de cultura y desafíos estratégicos.`;
+            } else if (context.screen === "hiring") {
+                sys += `\n\nCONTEXTO: El usuario está en el módulo Hiring gestionando vacantes y procesos de selección.`;
+                if (context.subPhase === "sin_vacantes") sys += ` Aún no tiene vacantes creadas.`;
+                else sys += ` Tiene vacantes activas en el listado.`;
+                sys += ` Puedes ayudar con estrategias de atracción de talento, publicación de vacantes y filtrado de candidatos.`;
+            } else if (context.screen === "hiring_pipeline") {
+                sys += `\n\nCONTEXTO: El usuario está gestionando el pipeline de candidatos de la vacante "${context.subPhase}" (estado: ${context.mode}).`;
+                if (context.formC?.mision) sys += ` Descripción: "${context.formC.mision}".`;
+                sys += ` Puedes ayudar con evaluación de candidatos, preguntas de entrevista, interpretación de perfiles 16PF y toma de decisiones de selección.`;
             }
 
             let history = messages.map(m => ({ role: m.role, content: m.content })).concat(newMsg);
@@ -97,7 +111,10 @@ export default function AiWidget({ context }: AiWidgetProps) {
                 console.error("API Error Data:", data);
                 throw new Error(data.error?.message || `Error ${res.status}: ${data.error || "Error en la IA"}`);
             }
-            const text = data.content?.[0]?.text || "Lo siento, hubo un problema respondiendo.";
+            const text = (typeof data.content === 'string'
+              ? data.content
+              : data.content?.[0]?.text
+            ) || "Lo siento, hubo un problema respondiendo.";
 
             setMessages(p => [...p, { role: "assistant", content: text }]);
 

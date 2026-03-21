@@ -76,44 +76,19 @@ export default function OnboardingPage() {
     e?.preventDefault()
     setError(''); setLoading(true)
     try {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Sin sesión activa')
-
-      const slug = companyName.toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-        + '-' + Math.random().toString(36).slice(2, 6)
-
-      const { data: org, error: orgError } = await supabase
-        .from('organizations')
-        .insert({ name: companyName, slug, plan: 'free' })
-        .select()
-        .single()
-      if (orgError) throw orgError
-
-      const { error: memError } = await supabase
-        .from('user_memberships')
-        .insert({ user_id: user.id, organization_id: org.id, role: 'owner', scope: 'organization', is_active: true })
-      if (memError) throw memError
-
-      // CRÍTICO: Crear el perfil base de la organización para evitar errores de RLS en el futuro
-      await supabase
-        .from('organization_profiles')
-        .insert({ organization_id: org.id, sector })
-
-      await supabase.auth.updateUser({ data: { sector } })
+      const res = await fetch('/api/onboarding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ companyName, sector }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al crear la empresa')
 
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {
       console.error("Onboarding Error:", err)
-      const msg = (err.message || '').toLowerCase()
-      if (msg.includes('duplicate')) setError('Ya existe una empresa con ese nombre. Intenta con un nombre diferente.')
-      else if (msg.includes('permission denied') || msg.includes('policy')) {
-        setError('Error de seguridad al crear la empresa. Esto suele suceder si ya tienes una sesión activa o una empresa pendiente. Prueba cerrando sesión y volviendo a intentar.')
-      }
-      else setError(err.message || 'Error al guardar. Intenta de nuevo.')
+      setError(err.message || 'Error al guardar. Intenta de nuevo.')
     }
     setLoading(false)
   }

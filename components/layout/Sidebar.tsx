@@ -11,9 +11,9 @@ import {
 
 const MODULES = [
   { id: 'dashboard', label: 'Dashboard', href: '/dashboard', Icon: LayoutDashboard, available: true },
-  { id: 'foundation', label: 'KultuDNA', href: '/foundation', Icon: Dna, available: true },
-  { id: 'architecture', label: 'Cargos', href: '/architecture', Icon: Building2, available: true },
-  { id: 'hiring', label: 'Selección', href: '/hiring', Icon: Briefcase, available: true },
+  { id: 'foundation', label: 'Foundation', href: '/foundation', Icon: Dna, available: true },
+  { id: 'architecture', label: 'Architecture', href: '/architecture', Icon: Building2, available: true },
+  { id: 'hiring', label: 'Hiring', href: '/hiring', Icon: Briefcase, available: true },
   { id: 'people', label: 'People', href: '/people', Icon: Users, available: true },
   { id: 'performance', label: 'Desempeño', href: '/performance', Icon: BarChart3, available: false },
   { id: 'learning', label: 'Aprendizaje', href: '/learning', Icon: BookOpen, available: false },

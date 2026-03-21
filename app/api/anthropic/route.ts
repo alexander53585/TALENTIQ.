@@ -18,6 +18,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'messages required' }, { status: 400 })
   }
 
-  const result = await callClaude(messages, { model, maxTokens, system })
-  return NextResponse.json(result)
+  try {
+    const result = await callClaude(messages, { model, maxTokens, system })
+    return NextResponse.json(result)
+  } catch (err: any) {
+    console.error('Claude API error:', err?.message)
+    return NextResponse.json({ error: err?.message || 'Error calling Claude API' }, { status: 500 })
+  }
 }

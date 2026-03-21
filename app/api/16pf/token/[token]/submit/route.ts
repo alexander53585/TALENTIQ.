@@ -24,22 +24,26 @@ export async function POST(
     const { token } = await params;
     const supabase = getServiceClient();
 
-    // Validate token
+    // 1. Validar token y estados de la evaluación
     const { data: evaluation, error: fetchErr } = await supabase
       .from('pf16_evaluations')
       .select('id, norm_idx, status')
       .eq('access_token', token)
-      .single();
+      .maybeSingle();
 
     if (fetchErr || !evaluation) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 404 });
+      return NextResponse.json({ error: 'Token inválido o evaluación inexistente' }, { status: 404 });
     }
 
     if (evaluation.status === 'completed') {
-      return NextResponse.json({ error: 'Esta evaluación ya fue completada' }, { status: 400 });
+      return NextResponse.json({ error: 'Esta evaluación ya fue completada previamente' }, { status: 400 });
     }
 
-    const body = await request.json();
+    if (evaluation.status === 'expired') {
+      return NextResponse.json({ error: 'Este enlace de evaluación ha expirado y no admite envíos' }, { status: 403 });
+    }
+
+    const body = await request.json().catch(() => ({}));
     const answers: Answers = body.answers;
 
     // Validate 187 answers

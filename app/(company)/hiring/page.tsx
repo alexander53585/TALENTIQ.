@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { C, FF } from '@/lib/tokens';
 import Link from 'next/link';
 import { StatusBadge } from '@/components/architecture/StatusBadge';
+import AiWidget from '@/components/kulturh/AiWidget';
 
 export default function HiringPage() {
   const [vacancies, setVacancies] = useState<any[]>([]);
@@ -105,6 +106,15 @@ export default function HiringPage() {
            </Link>
         ))}
       </div>
+
+      {/* ── RAY: Asistente IA de Hiring ── */}
+      <AiWidget context={{
+        screen: 'hiring',
+        mode: null,
+        step: 1,
+        subPhase: vacancies.length === 0 ? 'sin_vacantes' : 'listado',
+        formC: { puesto: null, area: 'Selección y Reclutamiento', mision: null },
+      }} />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { C, FF } from '@/lib/tokens';
 import Link from 'next/link';
 import CandidatePipeline from '@/components/hiring/CandidatePipeline';
+import AiWidget from '@/components/kulturh/AiWidget';
 
 export default function VacancyDetailPage({ params }: { params: { id: string } }) {
   const [vacancy, setVacancy] = useState<any>(null);
@@ -169,6 +170,18 @@ export default function VacancyDetailPage({ params }: { params: { id: string } }
 
       </div>
 
+      {/* ── RAY: Asistente IA de Pipeline ── */}
+      <AiWidget context={{
+        screen: 'hiring_pipeline',
+        mode: vacancy?.status ?? null,
+        step: 1,
+        subPhase: vacancy?.title ?? null,
+        formC: {
+          puesto: vacancy?.title ?? null,
+          area: 'Pipeline de candidatos',
+          mision: vacancy?.ad_content?.linkedin?.substring(0, 200) ?? null,
+        },
+      }} />
     </div>
   );
 }

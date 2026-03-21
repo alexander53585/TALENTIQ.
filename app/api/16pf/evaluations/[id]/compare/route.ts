@@ -14,54 +14,48 @@ export async function POST(
 
     const { id } = await params;
 
-    // Get evaluation with decatipos
+    // 1. Validar membresía y rol de RR.HH. (Owner, Admin, HR Specialist)
+    const { data: membership } = await supabase
+      .from('user_memberships')
+      .select('organization_id, role')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (!membership || !['owner', 'admin', 'hr_specialist'].includes(membership.role)) {
+      return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de RR.HH.' }, { status: 403 });
+    }
+
+    // 2. Obtener evaluación (incluyendo decatipos y el cargo asociado)
+    // Filtro crucial: organization_id de la membresía para cross-tenant isolation
     const { data: evaluation, error: evalErr } = await supabase
       .from('pf16_evaluations')
-      .select('*, job_position_id')
+      .select('*, job_positions(name, profile_16pf_reference)')
       .eq('id', id)
-      .single();
+      .eq('organization_id', membership.organization_id)
+      .maybeSingle();
 
-    if (evalErr || !evaluation) {
-      return NextResponse.json({ error: 'Evaluación no encontrada' }, { status: 404 });
+    if (evalErr) throw evalErr;
+    if (!evaluation) {
+      return NextResponse.json({ error: 'Evaluación no encontrada en tu organización' }, { status: 404 });
     }
 
     if (!evaluation.decatipos) {
       return NextResponse.json({ error: 'La evaluación no tiene resultados aún' }, { status: 400 });
     }
 
-    if (!evaluation.job_position_id) {
-      return NextResponse.json({ error: 'No hay cargo asociado a esta evaluación' }, { status: 400 });
-    }
-
-    // Get job position reference profile
-    const { data: jobPosition, error: jpErr } = await supabase
-      .from('job_positions')
-      .select('name, profile_16pf_reference')
-      .eq('id', evaluation.job_position_id)
-      .single();
-
-    if (jpErr || !jobPosition?.profile_16pf_reference) {
-      return NextResponse.json({ error: 'El cargo no tiene perfil de referencia 16PF' }, { status: 400 });
+    const jobPosition = evaluation.job_positions as any;
+    if (!jobPosition?.profile_16pf_reference) {
+      return NextResponse.json({ error: 'El cargo asociado no tiene perfil de referencia 16PF definido' }, { status: 400 });
     }
 
     const referenceProfile = jobPosition.profile_16pf_reference;
 
-    // Call AI for comparison
-    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-    const aiResponse = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      system: `Eres un psicólogo organizacional especialista en evaluación 16PF con más de 15 años de experiencia. Tu tarea es comparar el perfil real de un candidato con el perfil de referencia de un cargo.
-
-REGLAS IMPORTANTES:
-1. El perfil de referencia es ORIENTATIVO, no un criterio de exclusión.
-2. Para cada factor, indica: "coincide", "brecha_leve" o "brecha_significativa".
-3. Un nivel "alto" en referencia corresponde a decatipos 7-10, "medio" a 4-6, "bajo" a 1-3.
-4. Una brecha leve es ±1 zona (ej: ref="alto", candidato=6). Significativa es ±2+ zonas.
-5. Genera un análisis integrado con puntos de alineación, áreas de atención y recomendación.
-6. Responde SOLO en JSON válido.`,
-      messages: [{
+    // 3. Llamar a Claude para comparación usando nuestra utilidad de servidor
+    const { callClaude } = await import('@/lib/ai/server');
+    
+    const { content: aiTextContent } = await callClaude([
+      {
         role: 'user',
         content: `Compara el siguiente perfil del candidato con el perfil de referencia del cargo "${jobPosition.name}".
 
@@ -78,19 +72,28 @@ Responde en este formato JSON exacto:
   "areas_atencion": ["..."],
   "recomendacion": "..."
 }`
-      }],
+      }
+    ], {
+      system: `Eres un psicólogo organizacional especialista en evaluación 16PF con más de 15 años de experiencia. Tu tarea es comparar el perfil real de un candidato con el perfil de referencia de un cargo.
+
+REGLAS IMPORTANTES:
+1. El perfil de referencia es ORIENTATIVO, no un criterio de exclusión.
+2. Para cada factor, indica: "coincide", "brecha_leve" o "brecha_significativa".
+3. Un nivel "alto" en referencia corresponde a decatipos 7-10, "medio" a 4-6, "bajo" a 1-3.
+4. Una brecha leve es ±1 zona (ej: ref="alto", candidato=6). Significativa es ±2+ zonas.
+5. Genera un análisis integrado con puntos de alineación, áreas de atención y recomendación.
+6. Responde SOLO en JSON válido.`
     });
 
-    const textContent = aiResponse.content.find(c => c.type === 'text');
     let comparisonResult;
     try {
-      const jsonStr = textContent?.text?.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim() || '{}';
+      const jsonStr = aiTextContent?.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim() || '{}';
       comparisonResult = JSON.parse(jsonStr);
     } catch {
-      comparisonResult = { raw: textContent?.text, error: 'No se pudo parsear la respuesta de IA' };
+      comparisonResult = { raw: aiTextContent, error: 'No se pudo parsear la respuesta de la IA' };
     }
 
-    // Save comparison
+    // 4. Guardar la comparación
     const { data: comparison, error: compErr } = await supabase
       .from('pf16_cargo_comparisons')
       .insert({
@@ -99,13 +102,14 @@ Responde en este formato JSON exacto:
         comparison_result: comparisonResult,
       })
       .select()
-      .single();
+      .maybeSingle();
 
     if (compErr) throw compErr;
 
+    // Saneamiento de respuesta (no devolver IDs innecesarios del server)
     return NextResponse.json(comparison);
   } catch (err: unknown) {
-    console.error('16PF Compare error:', err);
+    console.error('[16PF Compare API] Error:', err);
     const message = err instanceof Error ? err.message : 'Error interno';
     return NextResponse.json({ error: message }, { status: 500 });
   }

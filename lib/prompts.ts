@@ -260,6 +260,64 @@ export const deleteDesc = async (k: string, organizationId?: string): Promise<bo
     } catch { return false; }
 };
 
+/* ═══════════════ DRAFT PERSISTENCE ═════════════════ */
+export const saveDraft = async (
+    draftKey: string,
+    mode: string,
+    step: number,
+    formData: { puesto?: string; area?: string; formC?: any; formL?: any },
+    organizationId: string,
+): Promise<boolean> => {
+    try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.id) return false;
+
+        const { error } = await supabase
+            .from('job_positions')
+            .upsert({
+                organization_id: organizationId,
+                user_id: user.id,
+                key: draftKey,
+                mode,
+                puesto: formData.puesto || formData.formC?.puesto || formData.formL?.puesto || '(sin nombre)',
+                area: formData.area || formData.formC?.area || formData.formL?.area || '',
+                status: 'draft',
+                data: { step, formC: formData.formC, formL: formData.formL, savedAt: Date.now() },
+            }, { onConflict: 'key' });
+
+        return !error;
+    } catch { return false; }
+};
+
+export const loadDrafts = async (organizationId: string): Promise<any[]> => {
+    try {
+        const supabase = createClient();
+        const { data } = await supabase
+            .from('job_positions')
+            .select('key, mode, puesto, area, created_at, data')
+            .eq('organization_id', organizationId)
+            .eq('status', 'draft')
+            .order('created_at', { ascending: false });
+        return data ?? [];
+    } catch { return []; }
+};
+
+export const deleteDraft = async (draftKey: string, organizationId: string): Promise<void> => {
+    try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.id) return;
+        await supabase
+            .from('job_positions')
+            .delete()
+            .eq('key', draftKey)
+            .eq('organization_id', organizationId)
+            .eq('user_id', user.id)
+            .eq('status', 'draft');
+    } catch { }
+};
+
 /* ═══════════════ FIELD SCHEMAS ═════════════════ */
 export const fieldsCrear = [
     {

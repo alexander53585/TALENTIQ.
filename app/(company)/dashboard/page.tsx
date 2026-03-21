@@ -4,40 +4,24 @@ import {
   Dna, Building2, Users, BarChart3, BookOpen,
   AlertTriangle, ArrowRight, Plus, CheckCircle2,
   Clock, Briefcase, TrendingUp, Settings,
-  ShieldCheck,
+  ShieldCheck, UserCheck, RefreshCw, Calendar, Activity,
 } from 'lucide-react'
 
 /* ── helpers ─────────────────────────────────────────── */
 async function fetchMetrics(supabase: Awaited<ReturnType<typeof createClient>>, orgId: string) {
-  const [profileRes, positionsRes, vacanciesRes, employeesRes] = await Promise.allSettled([
-    supabase
-      .from('organization_profiles')
-      .select('readiness_score, kultudna_summary')
-      .eq('organization_id', orgId)
-      .maybeSingle(),
-
-    supabase
-      .from('job_positions')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId),
-
-    supabase
-      .from('vacancies')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('status', 'active'),
-
-    supabase
-      .from('employees')
-      .select('id', { count: 'exact', head: true })
-      .eq('organization_id', orgId)
-      .eq('is_active', true),
+  const [profileRes, positionsRes, vacanciesRes, employeesRes, candidatesRes] = await Promise.allSettled([
+    supabase.from('organization_profiles').select('readiness_score, kultudna_summary').eq('organization_id', orgId).maybeSingle(),
+    supabase.from('job_positions').select('id', { count: 'exact', head: true }).eq('organization_id', orgId),
+    supabase.from('vacancies').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).in('status', ['published', 'in_process']),
+    supabase.from('employees').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).eq('is_active', true),
+    supabase.from('candidates').select('id', { count: 'exact', head: true }).eq('organization_id', orgId).not('status', 'in', '("hired")'),
   ])
 
   const profile = profileRes.status === 'fulfilled' ? profileRes.value.data : null
   const positions = positionsRes.status === 'fulfilled' ? (positionsRes.value.count ?? 0) : 0
   const vacancies = vacanciesRes.status === 'fulfilled' ? (vacanciesRes.value.count ?? 0) : 0
   const employees = employeesRes.status === 'fulfilled' ? (employeesRes.value.count ?? 0) : 0
+  const activeCandidates = candidatesRes.status === 'fulfilled' ? (candidatesRes.value.count ?? 0) : 0
 
   return {
     foundationScore: profile?.readiness_score ?? 0,
@@ -45,6 +29,7 @@ async function fetchMetrics(supabase: Awaited<ReturnType<typeof createClient>>, 
     positions,
     vacancies,
     employees,
+    activeCandidates,
   }
 }
 
@@ -164,6 +149,62 @@ function FoundationProgress({ score }: { score: number }) {
   )
 }
 
+/* ── HR KPI Card ──────────────────────────────────────── */
+function HRKpiCard({
+  icon: Icon,
+  label,
+  value,
+  unit,
+  trend,
+  trendLabel,
+  comingSoon,
+  iconColor = 'text-[#3B6FCA]',
+  iconBg = 'bg-[#3B6FCA]/10',
+}: {
+  icon: React.ElementType
+  label: string
+  value?: string | number
+  unit?: string
+  trend?: 'up' | 'down' | 'neutral'
+  trendLabel?: string
+  comingSoon?: boolean
+  iconColor?: string
+  iconBg?: string
+}) {
+  const trendColors = { up: 'text-emerald-500', down: 'text-red-500', neutral: 'text-slate-400' }
+  const trendArrows = { up: '↑', down: '↓', neutral: '→' }
+  return (
+    <div className={`bg-white rounded-2xl border border-slate-200 p-4 flex flex-col gap-3 ${comingSoon ? 'opacity-60' : ''}`}>
+      <div className="flex items-center justify-between">
+        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${iconBg}`}>
+          <Icon size={16} className={iconColor} />
+        </div>
+        {comingSoon && (
+          <span className="text-[10px] font-semibold bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full border border-slate-200 tracking-wide">
+            PRONTO
+          </span>
+        )}
+      </div>
+      <div>
+        <p className="text-xs text-slate-400 leading-none mb-1">{label}</p>
+        {comingSoon ? (
+          <p className="text-sm text-slate-300 font-medium italic">Sin datos aún</p>
+        ) : (
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-bold text-[#1E2A45] leading-none">{value ?? '—'}</span>
+            {unit && <span className="text-xs text-slate-400">{unit}</span>}
+          </div>
+        )}
+      </div>
+      {!comingSoon && trend && trendLabel && (
+        <p className={`text-[11px] font-medium ${trendColors[trend]} flex items-center gap-1`}>
+          <span>{trendArrows[trend]}</span> {trendLabel}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ── Page ─────────────────────────────────────────────── */
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -184,7 +225,7 @@ export default async function DashboardPage() {
 
   const metrics = orgId
     ? await fetchMetrics(supabase, orgId)
-    : { foundationScore: 0, hasKultuDNA: false, positions: 0, vacancies: 0, employees: 0 }
+    : { foundationScore: 0, hasKultuDNA: false, positions: 0, vacancies: 0, employees: 0, activeCandidates: 0 }
 
   const foundationComplete = metrics.foundationScore >= 100
   const hasAnyData = metrics.positions > 0 || metrics.employees > 0
@@ -337,6 +378,64 @@ export default async function DashboardPage() {
             <Link href="/foundation" className="flex items-center gap-1.5 bg-white border border-slate-200 text-[#1E2A45] text-xs font-semibold px-4 py-2 rounded-xl hover:bg-slate-50 transition-colors">
               <Dna size={13} /> Editar KultuDNA
             </Link>
+          </div>
+        </div>
+      )}
+
+      {/* ── HR Indicators ── */}
+      {orgId && (
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Indicadores de RH</p>
+            <span className="text-[11px] text-slate-400">Actualizado en tiempo real</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <HRKpiCard
+              icon={Users}
+              label="Headcount"
+              value={metrics.employees}
+              unit="colaboradores"
+              iconBg="bg-blue-50"
+              iconColor="text-blue-600"
+            />
+            <HRKpiCard
+              icon={Briefcase}
+              label="Vacantes activas"
+              value={metrics.vacancies}
+              unit="abiertas"
+              iconBg="bg-violet-50"
+              iconColor="text-violet-600"
+            />
+            <HRKpiCard
+              icon={UserCheck}
+              label="Candidatos activos"
+              value={metrics.activeCandidates}
+              unit="en proceso"
+              iconBg="bg-emerald-50"
+              iconColor="text-emerald-600"
+            />
+            <HRKpiCard
+              icon={Building2}
+              label="Cargos documentados"
+              value={metrics.positions}
+              unit="posiciones"
+              iconBg="bg-indigo-50"
+              iconColor="text-indigo-600"
+            />
+            <HRKpiCard
+              icon={RefreshCw}
+              label="Índice de rotación"
+              comingSoon
+              iconBg="bg-amber-50"
+              iconColor="text-amber-500"
+            />
+            <HRKpiCard
+              icon={Activity}
+              label="Ausentismo"
+              comingSoon
+              iconBg="bg-rose-50"
+              iconColor="text-rose-500"
+            />
           </div>
         </div>
       )}

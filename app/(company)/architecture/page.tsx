@@ -7,6 +7,7 @@ import { FunctionTable, EssentialPrioritization } from "@/components/kulturh/Fun
 import {
   parseAiJson, buildPredictPrompt, buildConditionsPrompt, buildFinalPrompt,
   saveDesc, loadHistorial, deleteDesc, updateKultvalue,
+  saveDraft, loadDrafts, deleteDraft,
   fieldsCrear, fieldsLevantar, initCrear, mkInitLevantar,
 } from "@/lib/prompts";
 import KultuValueForm, { KultuValueResult, KultuValueFactors } from "@/components/architecture/KultuValueForm";
@@ -19,13 +20,20 @@ const PDFViewer = lazy(() => import("@/components/kulturh/PDFViewer"));
 const AdminPanel = lazy(() => import("@/components/kulturh/AdminPanel"));
 
 /* ═══════════════ HISTORIAL ══════════════ */
-function HistorialGallery({ onViewProfile, organizationId }: { onViewProfile: (item: any) => void; organizationId?: string }) {
+function HistorialGallery({ onViewProfile, organizationId, onContinueDraft }: { onViewProfile: (item: any) => void; organizationId?: string; onContinueDraft?: (draft: any) => void }) {
   const [items, setItems] = useState<any[]>([]);
+  const [drafts, setDrafts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => { loadHistorial(organizationId).then(d => { setItems(d); setLoading(false); }); }, [organizationId]);
+  useEffect(() => {
+    if (!organizationId) { setLoading(false); return; }
+    Promise.all([
+      loadHistorial(organizationId),
+      loadDrafts(organizationId),
+    ]).then(([completed, draftList]) => { setItems(completed); setDrafts(draftList); setLoading(false); });
+  }, [organizationId]);
 
   const handleDelete = async (key: string) => {
     setDeleting(key);
@@ -34,10 +42,48 @@ function HistorialGallery({ onViewProfile, organizationId }: { onViewProfile: (i
     setDeleting(null);
   };
 
-  if (loading || items.length === 0) return null;
+  if (loading || (items.length === 0 && drafts.length === 0)) return null;
 
   return (
     <div style={{ marginTop: 56 }}>
+      {/* Borradores en progreso */}
+      {drafts.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <h3 style={{ fontFamily: FF, fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 12 }}>
+            📝 Borradores en progreso
+          </h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {drafts.map(d => (
+              <div key={d.key} style={{
+                background: "#fffbeb", border: `1.5px solid #f59e0b40`,
+                borderRadius: 12, padding: "14px 18px",
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+              }}>
+                <div>
+                  <span style={{ fontFamily: FF, fontSize: 13, fontWeight: 700, color: C.text }}>
+                    {d.puesto || "(sin nombre)"}
+                  </span>
+                  <span style={{ fontFamily: FF, fontSize: 12, color: C.textMuted, marginLeft: 10 }}>
+                    Paso {d.data?.step ?? 1}/4 · {d.mode === "crear" ? "Nuevo cargo" : "Levantamiento"}
+                  </span>
+                </div>
+                <button
+                  onClick={() => onContinueDraft?.(d)}
+                  style={{
+                    background: "#f59e0b", border: "none", color: "#fff",
+                    borderRadius: 8, padding: "8px 16px", fontFamily: FF,
+                    fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+                  }}
+                >
+                  Continuar →
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {items.length > 0 && (
       <div style={{ textAlign: "center", marginBottom: 28 }}>
         <h3 style={{ fontFamily: FF, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 6 }}>
           Descriptivos generados
@@ -45,7 +91,7 @@ function HistorialGallery({ onViewProfile, organizationId }: { onViewProfile: (i
         <p style={{ fontSize: 14, color: C.textSecondary, fontFamily: FF }}>
           {items.length} descriptivo{items.length !== 1 ? "s" : ""} en tu historial
         </p>
-      </div>
+      </div>)}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 16 }}>
         {items.map(item => {
           const isOpen = expanded === item.key;
@@ -100,7 +146,8 @@ function HistorialGallery({ onViewProfile, organizationId }: { onViewProfile: (i
 }
 
 /* ═══════════════ LANDING ════════════════ */
-function Landing({ onSelect, onViewProfile, organizationId }: { onSelect: (id: string) => void; onViewProfile: (item: any) => void; organizationId?: string }) {
+
+function Landing({ onSelect, onViewProfile, organizationId, onContinueDraft }: { onSelect: (id: string) => void; onViewProfile: (item: any) => void; organizationId?: string; onContinueDraft?: (draft: any) => void }) {
   const [hov, setHov] = useState<string | null>(null);
   const cards = [
     {
@@ -180,7 +227,7 @@ function Landing({ onSelect, onViewProfile, organizationId }: { onSelect: (id: s
           </div>
         ))}
       </div>
-      <HistorialGallery onViewProfile={onViewProfile} organizationId={organizationId as string | undefined} />
+      <HistorialGallery onViewProfile={onViewProfile} organizationId={organizationId as string | undefined} onContinueDraft={onContinueDraft} />
     </div>
   );
 }
@@ -559,6 +606,7 @@ export default function ArchitecturePage() {
   const [kvInitial, setKvInitial] = useState<KultuValueFactors | undefined>(undefined);
   const [kvSuggesting, setKvSuggesting] = useState(false);
   const [savedKey, setSavedKey] = useState<string | null>(null);
+  const [draftKey, setDraftKey] = useState<string | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const resRef = useRef<HTMLDivElement>(null);
 
@@ -570,7 +618,7 @@ export default function ArchitecturePage() {
   // ─── Draft key por organización ───────────────────────────────────────
   const DRAFT_KEY = `kulturh_draft_${organizationId || userId || "guest"}`;
 
-  // ─── Auto-guardado (incluye aiPredictions para no perder IA) ──────────
+  // ─── Auto-guardado localStorage (incluye aiPredictions para no perder IA) ──────────
   useEffect(() => {
     if (screen !== "form" || !mode) return;
     const draft = {
@@ -580,6 +628,13 @@ export default function ArchitecturePage() {
     };
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { }
   }, [formC, formL, step, subPhase, mode, screen, aiPredictions]);
+
+  // ─── Auto-guardado DB: persiste cada avance de paso ───────────────────
+  useEffect(() => {
+    if (screen !== "form" || !mode || !draftKey || !organizationId) return;
+    const form = mode === "crear" ? formC : formL;
+    saveDraft(draftKey, mode, step, { puesto: form.puesto, area: form.area, formC, formL }, organizationId);
+  }, [step, subPhase]);
 
   // ─── Restaurar borrador al montar ─────────────────────────────────────
   useEffect(() => {
@@ -630,8 +685,27 @@ export default function ArchitecturePage() {
     return grp.fields.filter((f: any) => f.required).every((f: any) => (form[f.key] || "").trim().length > 0);
   };
 
-  const handleSelect = (m: string) => { setMode(m); setScreen("form"); setStep(1); setSubPhase(null); setPendingDraft(null); };
+  const handleSelect = (m: string) => {
+    const newKey = `kulturh:draft:${m}:${Date.now()}`;
+    setDraftKey(newKey);
+    setMode(m); setScreen("form"); setStep(1); setSubPhase(null); setPendingDraft(null);
+    if (organizationId) saveDraft(newKey, m, 1, { formC: initCrear, formL: mkInitLevantar() }, organizationId);
+  };
+
+  const handleContinueDraft = (d: any) => {
+    const savedDraftData = d.data || {};
+    setDraftKey(d.key);
+    setMode(d.mode);
+    if (savedDraftData.formC) setFormC((p: any) => ({ ...p, ...savedDraftData.formC }));
+    if (savedDraftData.formL) setFormL((p: any) => ({ ...p, ...savedDraftData.formL }));
+    setStep(savedDraftData.step || 1);
+    setSubPhase(null);
+    setScreen("form");
+    setPendingDraft(null);
+  };
   const handleReset = () => {
+    if (draftKey && organizationId) deleteDraft(draftKey, organizationId);
+    setDraftKey(null);
     clearDraft();
     setPendingDraft(null);
     setScreen("landing"); setMode(null); setStep(1); setSubPhase(null);
@@ -717,6 +791,7 @@ export default function ArchitecturePage() {
       setKultvalue(null); setKvInitial(undefined);
       setScreen("result");
       clearDraft();
+      if (draftKey && organizationId) deleteDraft(draftKey, organizationId);
     } catch (err: any) {
       console.error("[Architecture] generate:", err.message);
       setError(err.message || "No pudimos conectar con la IA. Puedes continuar manualmente.");
@@ -795,7 +870,7 @@ export default function ArchitecturePage() {
           </Suspense>
         )}
 
-        {screen === "landing" && <Landing onSelect={handleSelect} onViewProfile={(item: any) => { setViewingProfile(item); setScreen("profile"); }} organizationId={organizationId ?? undefined} />}
+        {screen === "landing" && <Landing onSelect={handleSelect} onViewProfile={(item: any) => { setViewingProfile(item); setScreen("profile"); }} organizationId={organizationId ?? undefined} onContinueDraft={handleContinueDraft} />}
         {screen === "landing" && pendingDraft && (
           <DraftRecoveryToast draft={pendingDraft} onRestore={restoreDraft} onDiscard={discardDraft} />
         )}

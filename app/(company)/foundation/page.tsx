@@ -6,6 +6,7 @@ import { C, FF } from '@/lib/tokens'
 import { useOrganization } from '@/hooks/useOrganization'
 import { ValuesDeck, ArchetypesDeck, ChallengesDeck } from '@/components/foundation/KultuArchetypes'
 import { VALUE_CARDS, CHALLENGE_CARDS } from '@/lib/foundation/cards-data'
+import AiWidget from '@/components/kulturh/AiWidget'
 
 /* ══════════════════ TYPES ══════════════════════ */
 interface FoundationState {
@@ -421,7 +422,7 @@ function Phase4({ state, onChange, workshopMode }: { state: FoundationState; onC
 
 /* ══════════════════ MAIN PAGE ═══════════════════════════ */
 export default function FoundationPage() {
-  const { organizationId } = useOrganization()
+  const { organizationId, loading: orgLoading } = useOrganization()
   const [phase, setPhase] = useState(1)
   const [state, setState] = useState<FoundationState>(INIT)
   const [workshopMode, setWorkshopMode] = useState(false)
@@ -432,6 +433,9 @@ export default function FoundationPage() {
 
   // ── Restore state and handle draft recovery ──────────────────────────
   useEffect(() => {
+    if (orgLoading) return // wait for org resolution
+    if (!organizationId) { setLoading(false); return } // no org, stop spinner
+
     const loadData = async () => {
       try {
         const res = await fetch('/api/foundation/profile')
@@ -484,17 +488,9 @@ export default function FoundationPage() {
           dbState.selectedChallenges = selectedChalls
         }
 
-        // 3. Draft check
-        const DRAFT_KEY = `kulturh_foundation_draft_${organizationId}`
-        const rawDraft = localStorage.getItem(DRAFT_KEY)
-        if (rawDraft) {
-          const draft = JSON.parse(rawDraft)
-          // If draft is newer (last 2 hours), ask or auto-restore? 
-          // For now, let's just use DB as source of truth and only allow 
-          // in-session draft if user hasn't saved.
-          // BUT the user says "it doesn't save exactly where you left it".
-          // So we should probably check if there's a 'phase' in there.
-          if (draft.phase) setPhase(draft.phase)
+        // 3. Restore phase from DB (persists across sessions/devices)
+        if (data?.foundation_phase && data.foundation_phase > 1) {
+          setPhase(data.foundation_phase)
         }
 
         setState(dbState)
@@ -505,8 +501,8 @@ export default function FoundationPage() {
       }
     }
 
-    if (organizationId) loadData()
-  }, [organizationId])
+    loadData()
+  }, [organizationId, orgLoading])
 
   // ── Auto-save phase and unsaved state to draft ───────────────────────
   useEffect(() => {
@@ -530,23 +526,24 @@ export default function FoundationPage() {
   }
 
   // ── Save helpers ───────────────────────────────────────
-  const saveProfile = async () => {
+  const saveProfile = async (overridePhase?: number) => {
     const res = await fetch('/api/foundation/profile', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        mission:          state.mission,
-        vision:           state.vision,
-        purpose:          state.purpose,
+        mission:           state.mission,
+        vision:            state.vision,
+        purpose:           state.purpose,
         value_proposition: state.value_proposition,
-        key_processes:    state.key_processes,
-        critical_areas:   state.critical_areas,
-        work_mode:        state.work_mode,
-        digital_maturity: state.digital_maturity,
-        org_structure:    state.selectedArchetypes.join(' | ') || state.org_structure,
-        sector:           state.sector,
-        size:             state.size,
-        legal_structure:  state.legal_structure,
+        key_processes:     state.key_processes,
+        critical_areas:    state.critical_areas,
+        work_mode:         state.work_mode,
+        digital_maturity:  state.digital_maturity,
+        org_structure:     state.selectedArchetypes.join(' | ') || state.org_structure,
+        sector:            state.sector,
+        size:              state.size,
+        legal_structure:   state.legal_structure,
+        foundation_phase:  overridePhase ?? phase,
       }),
     })
     if (!res.ok) throw new Error('Error al guardar perfil')
@@ -596,11 +593,12 @@ export default function FoundationPage() {
   const handleNext = async () => {
     setSaving(true); setError('')
     try {
-      if (phase === 2) await Promise.all([saveProfile(), saveCardinales()])
-      else if (phase === 3) await saveProfile()
-      else if (phase === 4) { await Promise.all([saveProfile(), saveAxes()]); setSaved(true) }
-      else await saveProfile()
-      if (phase < 4) setPhase(p => p + 1)
+      const nextPhase = phase < 4 ? phase + 1 : phase
+      if (phase === 2) await Promise.all([saveProfile(nextPhase), saveCardinales()])
+      else if (phase === 3) await saveProfile(nextPhase)
+      else if (phase === 4) { await Promise.all([saveProfile(4), saveAxes()]); setSaved(true) }
+      else await saveProfile(nextPhase)
+      if (phase < 4) setPhase(nextPhase)
     } catch {
       setError('Error al guardar. Verifica tu conexión e intenta nuevamente.')
     } finally {
@@ -805,6 +803,19 @@ export default function FoundationPage() {
           )}
         </div>
       </div>
+
+      {/* ── RAY: Asistente IA de Foundation ── */}
+      <AiWidget context={{
+        screen: 'foundation',
+        mode: null,
+        step: phase,
+        subPhase: PHASES[phase - 1]?.label ?? null,
+        formC: {
+          puesto: null,
+          area: state.sector,
+          mision: state.mission || state.purpose,
+        },
+      }} />
     </div>
   )
 }
