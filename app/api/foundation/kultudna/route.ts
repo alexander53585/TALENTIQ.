@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { callClaude } from '@/lib/ai/server'
 import { getOrgId } from '@/lib/foundation/orgId'
 import { calcReadiness } from '@/lib/foundation/readiness'
+import { getLimits, getSizeLabel } from '@/lib/foundation/limits'
 
 /* ── Construye el prompt con todos los datos de Foundation ── */
 function buildKultuDNAPrompt(data: {
@@ -12,14 +13,24 @@ function buildKultuDNAPrompt(data: {
 }): string {
   const p = data.profile
   const valores = data.cardinales.map(c => `${c.name} (${c.dimension}): ${c.definition ?? ''}`).join('\n')
-  const ejes    = data.axes.map((a, i) => `${i + 1}. ${a.name}${a.description ? ` — ${a.description}` : ''}`).join('\n')
+  const ejes    = data.axes.map((a, i) => {
+    const dur = a.duration ? ` [${a.duration}]` : ''
+    return `${i + 1}. ${a.name}${dur}${a.description ? ` — ${a.description}` : ''}`
+  }).join('\n')
   const arquetipos = p.org_structure ?? ''
+
+  const sizeLabel = getSizeLabel(p.size ?? '')
+  const limits    = getLimits(p.size ?? '')
 
   return `Eres un consultor senior de cultura organizacional y gestión del talento.
 
 Con base en los siguientes datos de la empresa, genera un perfil cultural compacto llamado "KultuDNA".
 
 == DATOS DE LA ORGANIZACIÓN ==
+
+SECTOR: ${p.sector ?? 'No especificado'}
+TAMAÑO: ${p.size ?? 'No especificado'} (categoría: ${sizeLabel})
+NATURALEZA JURÍDICA: ${p.legal_structure ?? 'No especificada'}
 
 MISIÓN: ${p.mission ?? 'No definida'}
 VISIÓN: ${p.vision ?? 'No definida'}
@@ -30,13 +41,13 @@ MODALIDAD DE TRABAJO: ${p.work_mode ?? 'No especificada'}
 MADUREZ DIGITAL: ${p.digital_maturity ?? 'No especificada'}
 ARQUETIPOS CULTURALES: ${arquetipos || 'No seleccionados'}
 
-VALORES Y COMPETENCIAS CARDINALES:
+VALORES Y COMPETENCIAS CARDINALES (${data.cardinales.length} de ${limits.valores[0]}–${limits.valores[1]} recomendados para su tamaño):
 ${valores || 'No definidos'}
 
 PROCESOS CLAVE: ${(p.key_processes ?? []).join(', ') || 'No definidos'}
-ÁREAS CRÍTICAS: ${(p.critical_areas ?? []).join(', ') || 'No definidas'}
+ÁREAS / PRIORIDADES CRÍTICAS: ${(p.critical_areas ?? []).join(', ') || 'No definidas'}
 
-EJES ESTRATÉGICOS DEL PERÍODO:
+EJES ESTRATÉGICOS DEL PERÍODO (${data.axes.length} de ${limits.ejes[0]}–${limits.ejes[1]} recomendados; duración entre corchetes):
 ${ejes || 'No definidos'}
 
 == INSTRUCCIÓN ==

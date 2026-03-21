@@ -6,6 +6,7 @@ import { C, FF } from '@/lib/tokens'
 import { useOrganization } from '@/hooks/useOrganization'
 import { ValuesDeck, ArchetypesDeck, ChallengesDeck } from '@/components/foundation/KultuArchetypes'
 import { VALUE_CARDS, CHALLENGE_CARDS } from '@/lib/foundation/cards-data'
+import { getLimits, type FoundationLimits } from '@/lib/foundation/limits'
 import AiWidget from '@/components/kulturh/AiWidget'
 
 /* ══════════════════ TYPES ══════════════════════ */
@@ -31,7 +32,6 @@ const INIT: FoundationState = {
   axeDurations: {},
 }
 
-const MAX_AXES = 5
 const DURATION_OPTIONS = [
   { value: '3m',  label: 'Trimestral (3m)' },
   { value: '6m',  label: 'Semestral (6m)' },
@@ -193,17 +193,28 @@ function Textarea({ label, value, onChange, placeholder, hint, required, rows = 
   )
 }
 
-function TagInput({ label, value, onChange, placeholder }: {
-  label: string; value: string[]; onChange: (v: string[]) => void; placeholder?: string
+function TagInput({ label, value, onChange, placeholder, min, max }: {
+  label: string; value: string[]; onChange: (v: string[]) => void
+  placeholder?: string; min?: number; max?: number
 }) {
   const [input, setInput] = useState('')
+  const atMax = max !== undefined && value.length >= max
   const add = () => {
     const t = input.trim()
-    if (t && !value.includes(t)) { onChange([...value, t]); setInput('') }
+    if (t && !value.includes(t) && !atMax) { onChange([...value, t]); setInput('') }
   }
+  const belowMin = min !== undefined && value.length < min && value.length > 0
+  const badgeColor = atMax ? C.primary : belowMin ? '#f59e0b' : C.success
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <label style={{ fontFamily: FF, fontSize: 13, fontWeight: 600, color: C.text }}>{label}</label>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <label style={{ fontFamily: FF, fontSize: 13, fontWeight: 600, color: C.text }}>{label}</label>
+        {(min !== undefined || max !== undefined) && (
+          <span style={{ fontFamily: FF, fontSize: 11, color: badgeColor, fontWeight: 600 }}>
+            {value.length}{max !== undefined ? `/${max}` : ''}{min !== undefined ? ` (mín. ${min})` : ''}
+          </span>
+        )}
+      </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 42, padding: '8px 10px', border: `1.5px solid ${C.border}`, borderRadius: 10, background: '#fff' }}>
         {value.map(t => (
           <span key={t} style={{
@@ -216,18 +227,20 @@ function TagInput({ label, value, onChange, placeholder }: {
               style={{ background: 'none', border: 'none', color: C.primary, cursor: 'pointer', padding: 0, lineHeight: 1, fontSize: 14 }}>×</button>
           </span>
         ))}
-        <input
-          value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add() } }}
-          placeholder={value.length === 0 ? placeholder : 'Agregar otro...'}
-          style={{
-            border: 'none', outline: 'none', fontFamily: FF, fontSize: 13,
-            color: C.text, background: 'transparent', flex: 1, minWidth: 140,
-          }}
-        />
+        {!atMax && (
+          <input
+            value={input} onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add() } }}
+            placeholder={value.length === 0 ? placeholder : 'Agregar otro...'}
+            style={{
+              border: 'none', outline: 'none', fontFamily: FF, fontSize: 13,
+              color: C.text, background: 'transparent', flex: 1, minWidth: 140,
+            }}
+          />
+        )}
       </div>
       <p style={{ fontFamily: FF, fontSize: 11, color: C.textMuted, margin: 0 }}>
-        Escribe y presiona Enter o coma para agregar
+        {atMax ? `Límite alcanzado (${max})` : 'Escribe y presiona Enter o coma para agregar'}
       </p>
     </div>
   )
@@ -273,7 +286,7 @@ function Phase1({ state, onChange, workshopMode }: { state: FoundationState; onC
   )
 }
 
-function Phase2({ state, onChange, workshopMode }: { state: FoundationState; onChange: (k: keyof FoundationState, v: any) => void; workshopMode: boolean }) {
+function Phase2({ state, onChange, workshopMode, limits }: { state: FoundationState; onChange: (k: keyof FoundationState, v: any) => void; workshopMode: boolean; limits: FoundationLimits }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       <div>
@@ -313,6 +326,8 @@ function Phase2({ state, onChange, workshopMode }: { state: FoundationState; onC
           selected={state.selectedValues}
           onChange={v => onChange('selectedValues', v)}
           workshopMode={workshopMode}
+          min={limits.valores[0]}
+          max={limits.valores[1]}
         />
       </div>
 
@@ -332,13 +347,15 @@ function Phase2({ state, onChange, workshopMode }: { state: FoundationState; onC
           selected={state.selectedArchetypes}
           onChange={v => onChange('selectedArchetypes', v)}
           workshopMode={workshopMode}
+          min={limits.cardinales[0]}
+          maxSelect={limits.cardinales[1]}
         />
       </div>
     </div>
   )
 }
 
-function Phase3({ state, onChange, workshopMode }: { state: FoundationState; onChange: (k: keyof FoundationState, v: any) => void; workshopMode: boolean }) {
+function Phase3({ state, onChange, workshopMode, limits }: { state: FoundationState; onChange: (k: keyof FoundationState, v: any) => void; workshopMode: boolean; limits: FoundationLimits }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       <div>
@@ -365,13 +382,17 @@ function Phase3({ state, onChange, workshopMode }: { state: FoundationState; onC
         value={state.key_processes}
         onChange={v => onChange('key_processes', v)}
         placeholder="Ej: Gestión de ventas, Onboarding de clientes..."
+        min={limits.procesos[0]}
+        max={limits.procesos[1]}
       />
 
       <TagInput
-        label="Áreas críticas para el resultado"
+        label="Áreas / prioridades críticas del período"
         value={state.critical_areas}
         onChange={v => onChange('critical_areas', v)}
         placeholder="Ej: Tecnología, Talento, Experiencia de cliente..."
+        min={limits.prioridades[0]}
+        max={limits.prioridades[1]}
       />
 
       {state.selectedArchetypes.length > 0 && (
@@ -393,7 +414,7 @@ function Phase3({ state, onChange, workshopMode }: { state: FoundationState; onC
   )
 }
 
-function Phase4({ state, onChange, workshopMode }: { state: FoundationState; onChange: (k: keyof FoundationState, v: any) => void; workshopMode: boolean }) {
+function Phase4({ state, onChange, workshopMode, limits }: { state: FoundationState; onChange: (k: keyof FoundationState, v: any) => void; workshopMode: boolean; limits: FoundationLimits }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
       <div>
@@ -421,6 +442,8 @@ function Phase4({ state, onChange, workshopMode }: { state: FoundationState; onC
           selected={state.selectedChallenges}
           onChange={v => onChange('selectedChallenges', v)}
           workshopMode={workshopMode}
+          min={limits.ejes[0]}
+          max={limits.ejes[1]}
         />
       </div>
 
@@ -437,7 +460,7 @@ function Phase4({ state, onChange, workshopMode }: { state: FoundationState; onC
               fontFamily: FF, fontSize: 12, color: C.textMuted, fontWeight: 500,
               background: C.surfaceAlt, borderRadius: 8, padding: '3px 10px',
             }}>
-              {state.selectedChallenges.length}/{MAX_AXES} ejes · Define la duración de cada uno
+              {state.selectedChallenges.length}/{limits.ejes[1]} ejes · Define la duración de cada uno
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -557,7 +580,7 @@ export default function FoundationPage() {
               if (a.duration) durations[match.id] = a.duration
             }
           }
-          dbState.selectedChallenges = selectedChalls.slice(0, MAX_AXES)
+          dbState.selectedChallenges = selectedChalls.slice(0, 5)
           dbState.axeDurations = durations
         }
 
@@ -766,10 +789,12 @@ export default function FoundationPage() {
       }}>
         <style>{`@keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }`}</style>
 
-        {phase === 1 && <Phase1 state={state} onChange={chg} workshopMode={workshopMode} />}
-        {phase === 2 && <Phase2 state={state} onChange={chg} workshopMode={workshopMode} />}
-        {phase === 3 && <Phase3 state={state} onChange={chg} workshopMode={workshopMode} />}
-        {phase === 4 && <Phase4 state={state} onChange={chg} workshopMode={workshopMode} />}
+        {(() => { const limits = getLimits(state.size); return (<>
+          {phase === 1 && <Phase1 state={state} onChange={chg} workshopMode={workshopMode} />}
+          {phase === 2 && <Phase2 state={state} onChange={chg} workshopMode={workshopMode} limits={limits} />}
+          {phase === 3 && <Phase3 state={state} onChange={chg} workshopMode={workshopMode} limits={limits} />}
+          {phase === 4 && <Phase4 state={state} onChange={chg} workshopMode={workshopMode} limits={limits} />}
+        </>)})()}
 
         {/* Error */}
         {error && (
