@@ -165,7 +165,7 @@ export async function GET(req: NextRequest) {
 
     if (error) throw error
 
-    const rows = (rawRows ?? []) as { id: string; created_at: string; [key: string]: unknown }[]
+    const rows = (rawRows ?? []) as unknown as { id: string; created_at: string; [key: string]: unknown }[]
 
     // ── 6. Determinar hasMore y construir nextCursor ───────────────────
     const hasMore   = rows.length > limit
