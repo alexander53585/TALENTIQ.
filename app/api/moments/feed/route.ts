@@ -157,13 +157,15 @@ export async function GET(req: NextRequest) {
     // ── 5. Ordenar y paginar ───────────────────────────────────────────
     // Pinned posts primero en la primera página (sin cursor)
     // Con cursor, mantener orden cronológico estricto para consistencia
-    const { data: rows, error } = await query
+    const { data: rawRows, error } = await query
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
       .order('id',         { ascending: false })
       .limit(limit + 1)   // +1 para detectar hasMore
 
     if (error) throw error
+
+    const rows = (rawRows ?? []) as { id: string; created_at: string; [key: string]: unknown }[]
 
     // ── 6. Determinar hasMore y construir nextCursor ───────────────────
     const hasMore   = rows.length > limit
