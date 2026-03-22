@@ -118,12 +118,49 @@ export function validateCommunityCreate(body: unknown): ValidatedCommunityCreate
 
 // ────────────────────────────────────────────────────────────────────────
 
+// ── Post metadata ─────────────────────────────────────────────────────────────
+
+export interface ValidatedRecognitionMeta {
+  competency_id: string | null
+  employee_id:   string | null
+}
+
+export interface ValidatedQuestionMeta {
+  job_position_id: string | null
+}
+
+export type ValidatedPostMeta = ValidatedRecognitionMeta | ValidatedQuestionMeta | null
+
+function validateRecognitionMeta(raw: unknown): ValidatedRecognitionMeta {
+  if (!isPlainObject(raw)) return { competency_id: null, employee_id: null }
+  return {
+    competency_id: optionalUUID(raw.competency_id, 'metadata.competency_id'),
+    employee_id:   optionalUUID(raw.employee_id,   'metadata.employee_id'),
+  }
+}
+
+function validateQuestionMeta(raw: unknown): ValidatedQuestionMeta {
+  if (!isPlainObject(raw)) return { job_position_id: null }
+  return {
+    job_position_id: optionalUUID(raw.job_position_id, 'metadata.job_position_id'),
+  }
+}
+
+export function validatePostMeta(postType: PostType, raw: unknown): ValidatedPostMeta {
+  if (postType === 'recognition') return validateRecognitionMeta(raw)
+  if (postType === 'question')    return validateQuestionMeta(raw)
+  return null
+}
+
+// ── Post create ───────────────────────────────────────────────────────────────
+
 /** Matches moments_posts schema: post_type required, body (not content), title optional */
 export interface ValidatedPostCreate {
   community_id: string
   post_type:    PostType
   title:        string | null
   body:         string
+  metadata:     ValidatedPostMeta
 }
 
 export function validatePostCreate(body: unknown): ValidatedPostCreate {
@@ -139,10 +176,12 @@ export function validatePostCreate(body: unknown): ValidatedPostCreate {
     )
   }
 
-  const title = optionalString(body.title, 'title', { maxLen: 200 })
-  const text  = requireString(body.body, 'body', { minLen: 1, maxLen: 10_000 })
+  const postType = rawType as PostType
+  const title    = optionalString(body.title, 'title', { maxLen: 200 })
+  const text     = requireString(body.body, 'body', { minLen: 1, maxLen: 10_000 })
+  const metadata = validatePostMeta(postType, body.metadata)
 
-  return { community_id, post_type: rawType as PostType, title, body: text }
+  return { community_id, post_type: postType, title, body: text, metadata }
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -202,25 +241,96 @@ export function validateReactionCreate(body: unknown): ValidatedReactionCreate {
 
 // ────────────────────────────────────────────────────────────────────────
 
+/** Matches moments_reports.reason CHECK constraint in DB */
+export type ReportReason = 'spam' | 'inappropriate' | 'harassment' | 'misinformation' | 'other'
+const VALID_REPORT_REASONS = new Set<ReportReason>([
+  'spam', 'inappropriate', 'harassment', 'misinformation', 'other',
+])
+
+/** target_type / target_id come from the URL — body only needs reason + detail */
 export interface ValidatedReportCreate {
-  target_type: TargetType
-  target_id:   string
-  reason:      string
+  reason: ReportReason
+  detail: string | null
 }
 
 export function validateReportCreate(body: unknown): ValidatedReportCreate {
   if (!isPlainObject(body)) throw new ValidationError('El cuerpo de la solicitud debe ser JSON')
 
-  const rawTarget = body.target_type
-  if (!VALID_TARGET_TYPES.has(rawTarget as TargetType)) {
+  const rawReason = body.reason
+  if (!VALID_REPORT_REASONS.has(rawReason as ReportReason)) {
     throw new ValidationError(
-      `"target_type" debe ser: ${[...VALID_TARGET_TYPES].join(' | ')}`,
-      'target_type',
+      `"reason" debe ser uno de: ${[...VALID_REPORT_REASONS].join(', ')}`,
+      'reason',
     )
   }
 
-  const target_id = requireUUID(body.target_id, 'target_id')
-  const reason    = requireString(body.reason, 'reason', { minLen: 5, maxLen: 500 })
+  const detail = optionalString(body.detail, 'detail', { maxLen: 2_000 })
 
-  return { target_type: rawTarget as TargetType, target_id, reason }
+  return { reason: rawReason as ReportReason, detail }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+
+export type ReportResolution = 'dismiss' | 'action'
+const VALID_RESOLUTIONS = new Set<ReportResolution>(['dismiss', 'action'])
+
+export interface ValidatedReportResolve {
+  resolution: ReportResolution
+  notes:      string | null
+}
+
+export function validateReportResolve(body: unknown): ValidatedReportResolve {
+  if (!isPlainObject(body)) throw new ValidationError('El cuerpo de la solicitud debe ser JSON')
+
+  const rawRes = body.resolution
+  if (!VALID_RESOLUTIONS.has(rawRes as ReportResolution)) {
+    throw new ValidationError(
+      `"resolution" debe ser: ${[...VALID_RESOLUTIONS].join(' | ')}`,
+      'resolution',
+    )
+  }
+
+  const notes = optionalString(body.notes, 'notes', { maxLen: 2_000 })
+
+  return { resolution: rawRes as ReportResolution, notes }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+
+export interface ValidatedFeaturePost {
+  featured: boolean
+}
+
+export function validateFeaturePost(body: unknown): ValidatedFeaturePost {
+  if (!isPlainObject(body)) throw new ValidationError('El cuerpo de la solicitud debe ser JSON')
+  if (typeof body.featured !== 'boolean') {
+    throw new ValidationError('"featured" debe ser un booleano', 'featured')
+  }
+  return { featured: body.featured }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+
+export interface ValidatedHidePost {
+  hidden: boolean
+}
+
+export function validateHidePost(body: unknown): ValidatedHidePost {
+  if (!isPlainObject(body)) throw new ValidationError('El cuerpo de la solicitud debe ser JSON')
+  if (typeof body.hidden !== 'boolean') {
+    throw new ValidationError('"hidden" debe ser un booleano', 'hidden')
+  }
+  return { hidden: body.hidden }
+}
+
+// ────────────────────────────────────────────────────────────────────────
+
+export interface ValidatedBestAnswer {
+  comment_id: string | null   // null = unmark current best answer
+}
+
+export function validateBestAnswer(body: unknown): ValidatedBestAnswer {
+  if (!isPlainObject(body)) throw new ValidationError('El cuerpo de la solicitud debe ser JSON')
+  const comment_id = optionalUUID(body.comment_id, 'comment_id')
+  return { comment_id }
 }

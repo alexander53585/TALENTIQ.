@@ -9,6 +9,9 @@ import {
   validateCommentCreate,
   validateReactionCreate,
   validateReportCreate,
+  validateReportResolve,
+  validateFeaturePost,
+  validateHidePost,
 } from '../validators'
 
 // ── validateCommunityCreate ─────────────────────────────────────────────
@@ -210,26 +213,107 @@ describe('validateReactionCreate', () => {
 // ── validateReportCreate ────────────────────────────────────────────────
 
 describe('validateReportCreate', () => {
-  it('accepts valid report', () => {
-    const result = validateReportCreate({
-      target_type: 'comment',
-      target_id:   VALID_UUID,
-      reason:      'Contenido ofensivo',
+  it('accepts valid report with reason enum', () => {
+    const result = validateReportCreate({ reason: 'spam' })
+    expect(result.reason).toBe('spam')
+    expect(result.detail).toBeNull()
+  })
+
+  it('accepts all valid reason values', () => {
+    const reasons = ['spam', 'inappropriate', 'harassment', 'misinformation', 'other']
+    reasons.forEach(r => {
+      const result = validateReportCreate({ reason: r })
+      expect(result.reason).toBe(r)
     })
-    expect(result.target_type).toBe('comment')
-    expect(result.reason).toBe('Contenido ofensivo')
   })
 
-  it('throws on reason too short (< 5 chars)', () => {
-    expect(() => validateReportCreate({
-      target_type: 'post', target_id: VALID_UUID, reason: 'bad',
-    })).toThrow(ValidationError)
+  it('accepts optional detail up to 2000 chars', () => {
+    const result = validateReportCreate({ reason: 'harassment', detail: 'Detalle del reporte' })
+    expect(result.detail).toBe('Detalle del reporte')
   })
 
-  it('throws on reason too long (> 500 chars)', () => {
+  it('throws on invalid reason (free text)', () => {
+    expect(() => validateReportCreate({ reason: 'Contenido ofensivo' })).toThrow(ValidationError)
+  })
+
+  it('throws on missing reason', () => {
+    expect(() => validateReportCreate({})).toThrow(ValidationError)
+  })
+
+  it('throws on detail too long (> 2000 chars)', () => {
     expect(() => validateReportCreate({
-      target_type: 'post', target_id: VALID_UUID, reason: 'x'.repeat(501),
+      reason: 'spam', detail: 'x'.repeat(2001),
     })).toThrow(ValidationError)
+  })
+})
+
+// ── validateReportResolve ───────────────────────────────────────────────
+
+describe('validateReportResolve', () => {
+  it('accepts dismiss resolution', () => {
+    const result = validateReportResolve({ resolution: 'dismiss' })
+    expect(result.resolution).toBe('dismiss')
+    expect(result.notes).toBeNull()
+  })
+
+  it('accepts action resolution with notes', () => {
+    const result = validateReportResolve({ resolution: 'action', notes: 'Post eliminado' })
+    expect(result.resolution).toBe('action')
+    expect(result.notes).toBe('Post eliminado')
+  })
+
+  it('throws on invalid resolution', () => {
+    expect(() => validateReportResolve({ resolution: 'ignore' })).toThrow(ValidationError)
+  })
+
+  it('throws on missing resolution', () => {
+    expect(() => validateReportResolve({})).toThrow(ValidationError)
+  })
+
+  it('throws on notes too long (> 2000 chars)', () => {
+    expect(() => validateReportResolve({
+      resolution: 'dismiss', notes: 'x'.repeat(2001),
+    })).toThrow(ValidationError)
+  })
+})
+
+// ── validateFeaturePost ─────────────────────────────────────────────────
+
+describe('validateFeaturePost', () => {
+  it('accepts featured=true', () => {
+    expect(validateFeaturePost({ featured: true })).toEqual({ featured: true })
+  })
+
+  it('accepts featured=false', () => {
+    expect(validateFeaturePost({ featured: false })).toEqual({ featured: false })
+  })
+
+  it('throws when featured is a string', () => {
+    expect(() => validateFeaturePost({ featured: 'true' })).toThrow(ValidationError)
+  })
+
+  it('throws when featured is missing', () => {
+    expect(() => validateFeaturePost({})).toThrow(ValidationError)
+  })
+})
+
+// ── validateHidePost ────────────────────────────────────────────────────
+
+describe('validateHidePost', () => {
+  it('accepts hidden=true', () => {
+    expect(validateHidePost({ hidden: true })).toEqual({ hidden: true })
+  })
+
+  it('accepts hidden=false', () => {
+    expect(validateHidePost({ hidden: false })).toEqual({ hidden: false })
+  })
+
+  it('throws when hidden is a number', () => {
+    expect(() => validateHidePost({ hidden: 1 })).toThrow(ValidationError)
+  })
+
+  it('throws when hidden is missing', () => {
+    expect(() => validateHidePost({})).toThrow(ValidationError)
   })
 })
 

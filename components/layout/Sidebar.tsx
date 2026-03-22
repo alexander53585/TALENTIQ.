@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Dna, Building2, Users, BarChart3, BookOpen,
   AlertTriangle, ArrowRight, Plus, CheckCircle2,
   Clock, Briefcase, TrendingUp, Settings,
-  ShieldCheck, ChevronLeft, ChevronRight, X,
+  ShieldCheck, ChevronLeft, ChevronRight, X, Newspaper,
 } from 'lucide-react'
 
 const MODULES = [
@@ -14,8 +14,9 @@ const MODULES = [
   { id: 'foundation', label: 'Foundation', href: '/foundation', Icon: Dna, available: true },
   { id: 'architecture', label: 'Architecture', href: '/architecture', Icon: Building2, available: true },
   { id: 'hiring', label: 'Hiring', href: '/hiring', Icon: Briefcase, available: true },
-  { id: 'people', label: 'People', href: '/people', Icon: Users, available: true },
-  { id: 'performance', label: 'Desempeño', href: '/performance', Icon: BarChart3, available: false },
+  { id: 'people',      label: 'People',    href: '/people',      Icon: Users,     available: true  },
+  { id: 'moments',     label: 'Moments',   href: '/moments',     Icon: Newspaper, available: true  },
+  { id: 'performance', label: 'Desempeño', href: '/performance', Icon: BarChart3,  available: false },
   { id: 'learning', label: 'Aprendizaje', href: '/learning', Icon: BookOpen, available: false },
 ]
 

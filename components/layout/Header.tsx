@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 interface HeaderProps {
   orgName: string
   plan: string
+  logoUrl?: string | null
   userEmail: string
   userRole: string
   activeRole: string
@@ -31,7 +32,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 export default function Header({
-  orgName, plan, userEmail, userRole, activeRole, onSimulateRole, onMenuClick
+  orgName, plan, logoUrl, userEmail, userRole, activeRole, onSimulateRole, onMenuClick
 }: HeaderProps) {
   const router = useRouter()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -70,8 +71,17 @@ export default function Header({
 
       {/* Org info */}
       <div className="flex items-center gap-2 min-w-0">
-        <div className="w-7 h-7 rounded-lg bg-[#3B6FCA]/10 flex items-center justify-center shrink-0">
-          <Building2 size={14} className="text-[#3B6FCA]" />
+        <div className="w-7 h-7 rounded-lg bg-[#3B6FCA]/10 flex items-center justify-center shrink-0 overflow-hidden">
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt={orgName}
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <Building2 size={14} className="text-[#3B6FCA]" />
+          )}
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[#1E2A45] truncate leading-none">{orgName}</p>

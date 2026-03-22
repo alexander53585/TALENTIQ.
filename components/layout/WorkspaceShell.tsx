@@ -8,12 +8,13 @@ interface WorkspaceShellProps {
   children: React.ReactNode
   orgName: string
   plan: string
+  logoUrl?: string | null
   userEmail: string
   userRole: string
 }
 
 export default function WorkspaceShell({
-  children, orgName, plan, userEmail, userRole,
+  children, orgName, plan, logoUrl, userEmail, userRole,
 }: WorkspaceShellProps) {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -34,6 +35,7 @@ export default function WorkspaceShell({
         <Header
           orgName={orgName}
           plan={plan}
+          logoUrl={logoUrl}
           userEmail={userEmail}
           userRole={userRole}
           activeRole={activeRole}

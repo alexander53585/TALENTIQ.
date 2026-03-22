@@ -16,6 +16,7 @@ import { getRequestContext }         from '@/lib/auth/requestContext'
 import { validateCommentCreate }     from '@/lib/moments/validators'
 import { sanitizeText }              from '@/lib/moments/sanitize'
 import { checkRateLimit, rollbackRateLimit } from '@/lib/moments/rateLimit'
+import { sendMomentsNotification }           from '@/lib/moments/notifications'
 import {
   toErrorResponse,
   NotFoundError,
@@ -48,7 +49,7 @@ export async function POST(
     // ── 2. Verificar que el post existe en la org ──────────────────────
     const { data: post, error: postErr } = await supabase
       .from('moments_posts')
-      .select('id, is_locked, status')
+      .select('id, is_locked, status, author_id')
       .eq('id', postId)
       .eq('organization_id', orgId)   // AISLAMIENTO TENANT
       .maybeSingle()
@@ -108,6 +109,29 @@ export async function POST(
     if (insertErr) {
       rollbackRateLimit(userId, 'comment')
       throw insertErr
+    }
+
+    // ── 7. Notificar al autor del post (fire-and-forget) ───────────────
+    //   Only if commenter is not the post author
+    if (post.author_id && post.author_id !== userId) {
+      // Fetch commenter's display name for the notification
+      supabase
+        .from('employees')
+        .select('full_name')
+        .eq('user_id', userId)
+        .eq('organization_id', orgId)
+        .maybeSingle()
+        .then(({ data: actor }) => {
+          sendMomentsNotification({
+            organization_id:    orgId,
+            user_id:            post.author_id,
+            type:               'new_comment',
+            actor_id:           userId,
+            actor_display_name: actor?.full_name ?? undefined,
+            post_id:            postId,
+            body:               cleanBody.slice(0, 80),
+          })
+        })
     }
 
     return NextResponse.json({ data: comment }, { status: 201 })

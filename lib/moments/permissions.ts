@@ -148,6 +148,28 @@ export function canReact(_role: OrgRole): boolean {
   return true
 }
 
+// ── Moderación de posts ────────────────────────────────────────────────
+
+/**
+ * ¿Puede moderar (ocultar, destacar) un post específico?
+ * - owner/admin: siempre (toda la org)
+ * - hr_specialist: solo si es admin de la comunidad del post
+ * - otros: nunca
+ */
+export function canModeratePost(role: OrgRole, isCommunityAdmin: boolean): boolean {
+  if (role === 'owner' || role === 'admin') return true
+  if (role === 'hr_specialist') return isCommunityAdmin
+  return false
+}
+
+/**
+ * ¿Puede resolver (dismissar/accionar) un reporte?
+ * Mismas reglas que canModeratePost.
+ */
+export function canResolveReport(role: OrgRole, isCommunityAdmin: boolean): boolean {
+  return canModeratePost(role, isCommunityAdmin)
+}
+
 // ── Adjuntos ───────────────────────────────────────────────────────────
 
 /**

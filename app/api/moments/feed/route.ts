@@ -6,6 +6,8 @@
  *   postType     — filtrar por tipo (opcional, discussion|question|announcement|recognition)
  *   cursor       — paginación por cursor (base64url JSON {ts, id})
  *   limit        — ítems por página (1–50, default 20)
+ *   since        — ISO timestamp; si se provee, devuelve sólo posts creados DESPUÉS de esa fecha
+ *                  (usado por el polling fallback de useRealtimeMoments)
  *
  * Paginación por cursor (no offset):
  *   Cursor = base64url({ ts: ISO-8601, id: UUID }) del último ítem devuelto.
@@ -41,6 +43,7 @@ const POST_FIELDS = [
   'created_at',
   'updated_at',
   'author_id',
+  'metadata',
 ].join(', ')
 
 // ── Cursor ────────────────────────────────────────────────────────────
@@ -78,6 +81,7 @@ export async function GET(req: NextRequest) {
     const communityId = sp.get('communityId') ?? undefined
     const postType    = sp.get('postType')    ?? undefined
     const cursorRaw   = sp.get('cursor')      ?? undefined
+    const sinceRaw    = sp.get('since')       ?? undefined
     const limitRaw    = parseInt(sp.get('limit') ?? String(DEFAULT_LIMIT), 10)
 
     const limit = isNaN(limitRaw) || limitRaw < 1
@@ -97,6 +101,14 @@ export async function GET(req: NextRequest) {
         `"postType" debe ser: ${[...VALID_POST_TYPES].join(' | ')}`,
         'postType',
       )
+    }
+
+    // Validar since (si existe)
+    let sinceTs: string | null = null
+    if (sinceRaw) {
+      const d = new Date(sinceRaw)
+      if (isNaN(d.getTime())) throw new ValidationError('"since" debe ser un ISO timestamp válido', 'since')
+      sinceTs = d.toISOString()
     }
 
     // Decodificar cursor (si existe)
@@ -129,6 +141,8 @@ export async function GET(req: NextRequest) {
 
     if (communityId) query = query.eq('community_id', communityId)
     if (postType)    query = query.eq('post_type', postType)
+    // `since` mode: polling fallback — return only posts newer than the timestamp
+    if (sinceTs)     query = query.gt('created_at', sinceTs)
 
     // ── 4. Aplicar cursor ──────────────────────────────────────────────
     // Condición: (created_at < cursor.ts) OR (created_at = cursor.ts AND id < cursor.id)
