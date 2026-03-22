@@ -27,12 +27,23 @@ export async function POST(
     // 1. Validar token y estados de la evaluación
     const { data: evaluation, error: fetchErr } = await supabase
       .from('pf16_evaluations')
-      .select('id, norm_idx, status')
+      .select('id, norm_idx, status, expires_at')
       .eq('access_token', token)
       .maybeSingle();
 
     if (fetchErr || !evaluation) {
       return NextResponse.json({ error: 'Token inválido o evaluación inexistente' }, { status: 404 });
+    }
+
+    // Validar expiración por fecha (independiente del campo status)
+    if (evaluation.expires_at && new Date(evaluation.expires_at) < new Date()) {
+      if (evaluation.status !== 'expired') {
+        await supabase
+          .from('pf16_evaluations')
+          .update({ status: 'expired' })
+          .eq('id', evaluation.id)
+      }
+      return NextResponse.json({ error: 'Este enlace de evaluación ha expirado y no admite envíos' }, { status: 403 });
     }
 
     if (evaluation.status === 'completed') {

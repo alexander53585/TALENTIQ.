@@ -36,7 +36,7 @@ export async function POST(
     // 1. Obtener estado actual de la evaluación
     const { data: evaluation, error } = await supabase
       .from('pf16_evaluations')
-      .select('id, status, progress_pct')
+      .select('id, status, progress_pct, expires_at')
       .eq('access_token', token)
       .maybeSingle();
 
@@ -44,7 +44,19 @@ export async function POST(
       return NextResponse.json({ error: 'Token inválido o evaluación inexistente' }, { status: 404 });
     }
 
-    // 2. Validar estados bloqueantes
+    // 2. Validar expiración por fecha (independiente del campo status)
+    if (evaluation.expires_at && new Date(evaluation.expires_at) < new Date()) {
+      // Marcar como expirado si aún no lo estaba
+      if (evaluation.status !== 'expired') {
+        await supabase
+          .from('pf16_evaluations')
+          .update({ status: 'expired' })
+          .eq('id', evaluation.id)
+      }
+      return NextResponse.json({ error: 'Este enlace de evaluación ha expirado' }, { status: 403 });
+    }
+
+    // 3. Validar estados bloqueantes
     if (evaluation.status === 'completed') {
       return NextResponse.json({ error: 'Esta evaluación ya fue completada y no admite más cambios' }, { status: 400 });
     }

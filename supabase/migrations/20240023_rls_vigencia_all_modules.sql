@@ -80,17 +80,30 @@ COMMENT ON POLICY axes_isolation ON public.strategic_axes IS
   '(actualizada en 20240022 para incluir valid_until).';
 
 -- ── strategic_documents ───────────────────────────────────────────────
-DROP POLICY IF EXISTS docs_isolation ON public.strategic_documents;
+-- Aplicar solo si la tabla existe (puede no estar en todos los entornos)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'strategic_documents'
+  ) THEN
+    DROP POLICY IF EXISTS docs_isolation ON public.strategic_documents;
 
-CREATE POLICY docs_isolation
-  ON public.strategic_documents
-  FOR ALL
-  USING  (organization_id = public.user_org_id())
-  WITH CHECK (organization_id = public.user_org_id());
+    EXECUTE $pol$
+      CREATE POLICY docs_isolation
+        ON public.strategic_documents
+        FOR ALL
+        USING  (organization_id = public.user_org_id())
+        WITH CHECK (organization_id = public.user_org_id())
+    $pol$;
 
-COMMENT ON POLICY docs_isolation ON public.strategic_documents IS
-  'Aislamiento de tenant. Delega verificación de vigencia a user_org_id() '
-  '(actualizada en 20240022 para incluir valid_until).';
+    COMMENT ON TABLE public.strategic_documents IS
+      'RLS vigencia conformada: docs_isolation delega a user_org_id() '
+      '(valid_until incluido desde 20240022).';
+  ELSE
+    RAISE NOTICE '20240023: tabla strategic_documents no existe — policy omitida';
+  END IF;
+END $$;
 
 
 -- ════════════════════════════════════════════════════════════════════════
