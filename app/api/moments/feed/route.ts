@@ -98,7 +98,7 @@ export async function GET(req: NextRequest) {
 
     if (postType && !VALID_POST_TYPES.has(postType)) {
       throw new ValidationError(
-        `"postType" debe ser: ${[...VALID_POST_TYPES].join(' | ')}`,
+        `"postType" debe ser: ${Array.from(VALID_POST_TYPES).join(' | ')}`,
         'postType',
       )
     }

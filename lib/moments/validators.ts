@@ -106,7 +106,7 @@ export function validateCommunityCreate(body: unknown): ValidatedCommunityCreate
   const rawPolicy   = body.posting_policy ?? 'all_members'
   if (!VALID_POSTING_POLICIES.has(rawPolicy as PostingPolicy)) {
     throw new ValidationError(
-      `"posting_policy" debe ser uno de: ${[...VALID_POSTING_POLICIES].join(', ')}`,
+      `"posting_policy" debe ser uno de: ${Array.from(VALID_POSTING_POLICIES).join(', ')}`,
       'posting_policy',
     )
   }
@@ -171,7 +171,7 @@ export function validatePostCreate(body: unknown): ValidatedPostCreate {
   const rawType = body.post_type
   if (!VALID_POST_TYPES.has(rawType as PostType)) {
     throw new ValidationError(
-      `"post_type" debe ser: ${[...VALID_POST_TYPES].join(' | ')}`,
+      `"post_type" debe ser: ${Array.from(VALID_POST_TYPES).join(' | ')}`,
       'post_type',
     )
   }
@@ -217,7 +217,7 @@ export function validateReactionCreate(body: unknown): ValidatedReactionCreate {
   const rawTarget = body.target_type
   if (!VALID_TARGET_TYPES.has(rawTarget as TargetType)) {
     throw new ValidationError(
-      `"target_type" debe ser: ${[...VALID_TARGET_TYPES].join(' | ')}`,
+      `"target_type" debe ser: ${Array.from(VALID_TARGET_TYPES).join(' | ')}`,
       'target_type',
     )
   }
@@ -227,7 +227,7 @@ export function validateReactionCreate(body: unknown): ValidatedReactionCreate {
   const rawReaction = body.reaction_type
   if (!VALID_REACTION_TYPES.has(rawReaction as ReactionType)) {
     throw new ValidationError(
-      `"reaction_type" debe ser uno de: ${[...VALID_REACTION_TYPES].join(', ')}`,
+      `"reaction_type" debe ser uno de: ${Array.from(VALID_REACTION_TYPES).join(', ')}`,
       'reaction_type',
     )
   }
@@ -259,7 +259,7 @@ export function validateReportCreate(body: unknown): ValidatedReportCreate {
   const rawReason = body.reason
   if (!VALID_REPORT_REASONS.has(rawReason as ReportReason)) {
     throw new ValidationError(
-      `"reason" debe ser uno de: ${[...VALID_REPORT_REASONS].join(', ')}`,
+      `"reason" debe ser uno de: ${Array.from(VALID_REPORT_REASONS).join(', ')}`,
       'reason',
     )
   }
@@ -285,7 +285,7 @@ export function validateReportResolve(body: unknown): ValidatedReportResolve {
   const rawRes = body.resolution
   if (!VALID_RESOLUTIONS.has(rawRes as ReportResolution)) {
     throw new ValidationError(
-      `"resolution" debe ser: ${[...VALID_RESOLUTIONS].join(' | ')}`,
+      `"resolution" debe ser: ${Array.from(VALID_RESOLUTIONS).join(' | ')}`,
       'resolution',
     )
   }
