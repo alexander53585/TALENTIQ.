@@ -29,9 +29,9 @@ let lastCleanup = Date.now()
 function maybeCleanup(now: number) {
   if (now - lastCleanup < 5 * 60_000) return
   lastCleanup = now
-  for (const [key, timestamps] of store.entries()) {
+  Array.from(store.entries()).forEach(([key, timestamps]) => {
     if (timestamps.length === 0) store.delete(key)
-  }
+  })
 }
 
 // ── Función pública ───────────────────────────────────────────────────

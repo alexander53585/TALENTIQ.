@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
     const result: Record<string, number> = {}
 
     await Promise.all(
-      [...validIds].map(async (communityId) => {
+      Array.from(validIds).map(async (communityId) => {
         const sinceRaw = sp.get(`since_${communityId}`)
         if (!sinceRaw) return   // no timestamp = no baseline = skip
 
