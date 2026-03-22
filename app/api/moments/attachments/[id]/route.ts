@@ -11,12 +11,13 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@/lib/supabase/server'
-import { getOrgId }                  from '@/lib/foundation/orgId'
+import { getRequestContext }         from '@/lib/auth/requestContext'
 import {
   deleteFromStorage,
   logStorageAudit,
   MomentsStorageError,
 } from '@/lib/moments/storage'
+import { toErrorResponse, NotFoundError, ForbiddenError } from '@/lib/moments/errors'
 
 const ADMIN_ROLES = new Set(['owner', 'admin', 'hr_specialist'])
 
@@ -25,24 +26,13 @@ export async function DELETE(
   { params }: { params: { id: string } },
 ) {
   try {
-    // ── 1. Autenticación ─────────────────────────────────────────────
+    // ── 1. Autenticación y resolución de contexto (orgId, userId, role) ──
+    //    getRequestContext() lanza NotAuthenticatedError / ForbiddenError
+    //    si la sesión no existe o la membresía está inactiva/expirada.
+    const { userId, orgId, role } = await getRequestContext()
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
 
-    // ── 2. Resolución de org y rol ────────────────────────────────────
-    const orgId = await getOrgId(supabase, user.id)
-    if (!orgId) return NextResponse.json({ error: 'Sin membresía activa' }, { status: 403 })
-
-    const { data: membership } = await supabase
-      .from('user_memberships')
-      .select('role')
-      .eq('user_id', user.id)
-      .eq('organization_id', orgId)
-      .eq('is_active', true)
-      .maybeSingle()
-
-    const isAdmin = membership ? ADMIN_ROLES.has(membership.role) : false
+    const isAdmin = ADMIN_ROLES.has(role)
 
     const { id } = await params
 
@@ -55,13 +45,14 @@ export async function DELETE(
       .maybeSingle()
 
     if (findErr || !attachment) {
-      return NextResponse.json({ error: 'Adjunto no encontrado' }, { status: 404 })
+      // 404 homogéneo: no revelar si el adjunto existe en otra org (anti-enumeración)
+      throw new NotFoundError('Adjunto no encontrado')
     }
 
     // ── 4. Verificar ownership: uploader o admin ──────────────────────
-    const isOwner = attachment.uploaded_by === user.id
+    const isOwner = attachment.uploaded_by === userId
     if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: 'Sin permiso para eliminar este adjunto' }, { status: 403 })
+      throw new ForbiddenError('Sin permiso para eliminar este adjunto')
     }
 
     // ── 5. Eliminar registro en DB primero (si falla el storage, el dato queda)
@@ -91,7 +82,7 @@ export async function DELETE(
     // ── 7. Auditoría ──────────────────────────────────────────────────
     void logStorageAudit({
       orgId,
-      actorId:  user.id,
+      actorId:  userId,
       action:   'attachment.delete',
       targetId: id,
       metadata: {
@@ -106,7 +97,6 @@ export async function DELETE(
     if (err instanceof MomentsStorageError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: 500 })
     }
-    console.error('[Moments Attachments] DELETE error:', err)
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+    return toErrorResponse(err)
   }
 }

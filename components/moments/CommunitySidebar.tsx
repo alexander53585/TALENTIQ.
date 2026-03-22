@@ -40,34 +40,52 @@ export default function CommunitySidebar({ communities, selected, onSelect, filt
             <p className="px-4 py-3 text-xs text-slate-400">No hay comunidades activas.</p>
           )}
 
-          {communities.map(c => (
-            <button
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors ${
-                selected === c.id
-                  ? 'text-[#3B6FCA] font-semibold bg-[#3B6FCA]/5'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${
-                selected === c.id ? 'bg-[#3B6FCA]/10' : 'bg-slate-100'
-              }`}>
-                {c.is_private
-                  ? <Lock size={10} className={selected === c.id ? 'text-[#3B6FCA]' : 'text-slate-400'} />
-                  : <Hash size={10} className={selected === c.id ? 'text-[#3B6FCA]' : 'text-slate-400'} />
-                }
-              </div>
-              <span className="flex-1 text-left truncate">{c.name}</span>
-              {(unreadCounts[c.id] ?? 0) > 0 ? (
-                <span className="min-w-[18px] h-[18px] bg-[#3B6FCA] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none tabular-nums">
-                  {unreadCounts[c.id]! > 99 ? '99+' : unreadCounts[c.id]}
-                </span>
-              ) : c.member_count > 0 ? (
-                <span className="text-[10px] text-slate-400 tabular-nums">{c.member_count}</span>
-              ) : null}
-            </button>
-          ))}
+          {communities.map(c => {
+            // A private community the user hasn't joined yet is "restricted"
+            const isRestricted = c.is_private && c.is_member === false
+            return (
+              <button
+                key={c.id}
+                onClick={() => onSelect(c.id)}
+                aria-disabled={isRestricted}
+                title={isRestricted ? 'Comunidad privada — solicita acceso al administrador' : undefined}
+                className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-sm transition-colors ${
+                  isRestricted
+                    ? 'opacity-50 cursor-not-allowed text-slate-400'
+                    : selected === c.id
+                      ? 'text-[#3B6FCA] font-semibold bg-[#3B6FCA]/5'
+                      : 'text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <div className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${
+                  isRestricted
+                    ? 'bg-slate-100'
+                    : selected === c.id ? 'bg-[#3B6FCA]/10' : 'bg-slate-100'
+                }`}>
+                  {c.is_private
+                    ? <Lock size={10} className={
+                        isRestricted
+                          ? 'text-slate-300'
+                          : selected === c.id ? 'text-[#3B6FCA]' : 'text-slate-400'
+                      } />
+                    : <Hash size={10} className={selected === c.id ? 'text-[#3B6FCA]' : 'text-slate-400'} />
+                  }
+                </div>
+                <span className="flex-1 text-left truncate">{c.name}</span>
+                {isRestricted ? (
+                  <span className="text-[9px] text-slate-400 font-medium uppercase tracking-wide shrink-0">
+                    Privada
+                  </span>
+                ) : (unreadCounts[c.id] ?? 0) > 0 ? (
+                  <span className="min-w-[18px] h-[18px] bg-[#3B6FCA] text-white text-[9px] font-bold rounded-full flex items-center justify-center px-1 leading-none tabular-nums">
+                    {unreadCounts[c.id]! > 99 ? '99+' : unreadCounts[c.id]}
+                  </span>
+                ) : c.member_count > 0 ? (
+                  <span className="text-[10px] text-slate-400 tabular-nums">{c.member_count}</span>
+                ) : null}
+              </button>
+            )
+          })}
         </nav>
       </div>
 

@@ -15,16 +15,17 @@ export async function POST(
   { params }: { params: { id: string } },
 ) {
   try {
-    const { userId }  = await getRequestContext()
-    const { id }      = await params
-    const supabase    = await createClient()
+    const { userId, orgId } = await getRequestContext()
+    const { id }            = await params
+    const supabase          = await createClient()
 
     const { data, error } = await supabase
       .from('moments_notifications')
       .update({ read_at: new Date().toISOString() })
       .eq('id', id)
-      .eq('user_id', userId)   // tenant + user isolation
-      .is('read_at', null)     // idempotent: only update if not already read
+      .eq('user_id', userId)          // user isolation
+      .eq('organization_id', orgId)   // tenant isolation
+      .is('read_at', null)            // idempotent: only update if not already read
       .select('id')
       .maybeSingle()
 

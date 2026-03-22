@@ -21,9 +21,9 @@ import { toErrorResponse }           from '@/lib/moments/errors'
 
 export async function GET(req: NextRequest) {
   try {
-    const { userId }  = await getRequestContext()
-    const supabase    = await createClient()
-    const sp          = req.nextUrl.searchParams
+    const { userId, orgId } = await getRequestContext()
+    const supabase          = await createClient()
+    const sp                = req.nextUrl.searchParams
 
     const limitRaw = parseInt(sp.get('limit') ?? '20', 10)
     const limit    = isNaN(limitRaw) ? 20 : Math.min(Math.max(1, limitRaw), 50)
@@ -35,7 +35,8 @@ export async function GET(req: NextRequest) {
         'id, type, actor_display_name, post_id, title, body, read_at, created_at',
         { count: 'exact' },
       )
-      .eq('user_id', userId)   // RLS also enforces this
+      .eq('user_id', userId)          // user isolation
+      .eq('organization_id', orgId)   // tenant isolation
       .order('created_at', { ascending: false })
       .limit(limit)
 
@@ -51,6 +52,7 @@ export async function GET(req: NextRequest) {
       .from('moments_notifications')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
+      .eq('organization_id', orgId)   // tenant isolation
       .is('read_at', null)
 
     return NextResponse.json({

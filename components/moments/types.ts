@@ -8,6 +8,8 @@ export interface Community {
   posting_policy: 'all_members' | 'admins_only'
   is_private:     boolean
   member_count:   number
+  /** Whether the current user is an active member of this community. */
+  is_member?:     boolean
 }
 
 // ── Post metadata types ───────────────────────────────────────────────────────

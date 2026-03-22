@@ -11,13 +11,14 @@ import { toErrorResponse } from '@/lib/moments/errors'
 
 export async function POST() {
   try {
-    const { userId } = await getRequestContext()
-    const supabase   = await createClient()
+    const { userId, orgId } = await getRequestContext()
+    const supabase          = await createClient()
 
     const { error } = await supabase
       .from('moments_notifications')
       .update({ read_at: new Date().toISOString() })
       .eq('user_id', userId)
+      .eq('organization_id', orgId)   // tenant isolation
       .is('read_at', null)
 
     if (error) throw error

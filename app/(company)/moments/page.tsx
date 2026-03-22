@@ -41,19 +41,21 @@ export default async function MomentsRoute() {
     .eq('is_archived', false)
     .order('name', { ascending: true })
 
-  // Member counts per community
+  // Member counts per community + current-user membership lookup
   const communityIds = (commRows ?? []).map(c => c.id)
   const memberCounts: Record<string, number> = {}
+  const userMemberSet = new Set<string>()
 
   if (communityIds.length > 0) {
     const { data: countRows } = await supabase
       .from('moments_community_members')
-      .select('community_id')
+      .select('community_id, user_id')
       .in('community_id', communityIds)
-      .eq('status', 'active')
+      .eq('is_active', true)
 
     for (const r of countRows ?? []) {
       memberCounts[r.community_id] = (memberCounts[r.community_id] ?? 0) + 1
+      if (r.user_id === user.id) userMemberSet.add(r.community_id)
     }
   }
 
@@ -64,6 +66,7 @@ export default async function MomentsRoute() {
     posting_policy: c.posting_policy as Community['posting_policy'],
     is_private:     c.is_private,
     member_count:   memberCounts[c.id] ?? 0,
+    is_member:      userMemberSet.has(c.id),
   }))
 
   // ── 4. Initial posts ──────────────────────────────────────────────────

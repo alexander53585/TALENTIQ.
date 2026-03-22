@@ -45,7 +45,7 @@ function makeReq(method = 'GET', body?: unknown): NextRequest {
     init.body    = JSON.stringify(body)
     init.headers = { 'content-type': 'application/json' }
   }
-  return new NextRequest('http://localhost/api/moments/communities', init)
+  return new NextRequest('http://localhost/api/moments/communities', init as RequestInit & { signal?: AbortSignal })
 }
 
 type SupabaseChain = Record<string, (...args: unknown[]) => unknown>
@@ -69,7 +69,8 @@ function makeChain(
   chain.maybeSingle = async () => result
   chain.single      = async () => result
   // For awaiting the chain directly (insert without .single())
-  chain.then        = (fn: (v: typeof result) => unknown) => Promise.resolve(fn(result))
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(chain as any).then = (fn: (v: unknown) => unknown) => Promise.resolve(fn(result))
   return chain
 }
 
@@ -240,7 +241,8 @@ describe('POST /communities/[id]/join — aislamiento multiempresa', () => {
       return { data: null, error: null } // no es miembro aún
     }
     chain.insert = () => chain   // insert no lanza error
-    chain.then   = (fn: (v: { error: null }) => unknown) => Promise.resolve(fn({ error: null }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ;(chain as any).then = (fn: (v: unknown) => unknown) => Promise.resolve(fn({ error: null }))
 
     mockCreateClient.mockResolvedValue({
       from: () => chain,
@@ -291,7 +293,7 @@ describe('POST /communities/[id]/leave — aislamiento multiempresa', () => {
   it('devuelve 404 cuando la comunidad pertenece a otra org', async () => {
     const { POST } = await import('../../../app/api/moments/communities/[id]/leave/route')
 
-    mockGetCtx.mockResolvedValue({ userId: USER_A, orgId: ORG_A, role: 'member' })
+    mockGetCtx.mockResolvedValue({ userId: USER_A, orgId: ORG_A, role: 'employee' })
 
     const eqLog: Array<[string, unknown]> = []
     const chain = makeChain({ data: null, error: null }, eqLog)
@@ -310,7 +312,7 @@ describe('POST /communities/[id]/leave — aislamiento multiempresa', () => {
   it('devuelve 404 si el usuario no es miembro de la comunidad', async () => {
     const { POST } = await import('../../../app/api/moments/communities/[id]/leave/route')
 
-    mockGetCtx.mockResolvedValue({ userId: USER_A, orgId: ORG_A, role: 'member' })
+    mockGetCtx.mockResolvedValue({ userId: USER_A, orgId: ORG_A, role: 'employee' })
 
     let callCount = 0
     const chain = makeChain({ data: null, error: null })
