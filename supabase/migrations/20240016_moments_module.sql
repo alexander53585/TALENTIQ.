@@ -107,44 +107,8 @@ CREATE TRIGGER trg_moments_communities_updated_at
 ALTER TABLE public.moments_communities ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.moments_communities FORCE  ROW LEVEL SECURITY;
 
--- SELECT: miembro activo de la org (comunidades privadas requieren membresía en la comunidad)
-CREATE POLICY "moments_communities_select" ON public.moments_communities
-  FOR SELECT USING (
-    organization_id = public.user_org_id()
-    AND (
-      NOT is_private
-      OR EXISTS (
-        SELECT 1 FROM public.moments_community_members mcm
-        WHERE mcm.community_id    = id
-          AND mcm.organization_id = organization_id
-          AND mcm.user_id         = auth.uid()
-      )
-      OR public.user_is_org_admin()
-    )
-  );
-
--- INSERT: solo admins pueden crear comunidades (ajustable a 'all_members' si se requiere)
-CREATE POLICY "moments_communities_insert" ON public.moments_communities
-  FOR INSERT WITH CHECK (
-    organization_id = public.user_org_id()
-    AND created_by  = auth.uid()
-    AND public.user_is_org_admin()
-  );
-
--- UPDATE: admin de la comunidad o admin de la org
-CREATE POLICY "moments_communities_update" ON public.moments_communities
-  FOR UPDATE USING (organization_id = public.user_org_id())
-  WITH CHECK (
-    organization_id = public.user_org_id()
-    AND public.user_is_org_admin()
-  );
-
--- DELETE: solo admins de la org
-CREATE POLICY "moments_communities_delete" ON public.moments_communities
-  FOR DELETE USING (
-    organization_id = public.user_org_id()
-    AND public.user_is_org_admin()
-  );
+-- Políticas de moments_communities se crean DESPUÉS de moments_community_members
+-- para que el subquery en la política SELECT pueda referenciar la tabla ya existente.
 
 -- ══════════════════════════════════════════════════════════════════════
 -- 4. TABLA: moments_community_members
@@ -193,6 +157,44 @@ CREATE POLICY "mcm_delete" ON public.moments_community_members
   FOR DELETE USING (
     organization_id = public.user_org_id()
     AND (user_id = auth.uid() OR public.user_is_org_admin())
+  );
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 4b. POLÍTICAS: moments_communities (aquí porque SELECT referencia moments_community_members)
+-- ══════════════════════════════════════════════════════════════════════
+CREATE POLICY "moments_communities_select" ON public.moments_communities
+  FOR SELECT USING (
+    organization_id = public.user_org_id()
+    AND (
+      NOT is_private
+      OR EXISTS (
+        SELECT 1 FROM public.moments_community_members mcm
+        WHERE mcm.community_id    = id
+          AND mcm.organization_id = organization_id
+          AND mcm.user_id         = auth.uid()
+      )
+      OR public.user_is_org_admin()
+    )
+  );
+
+CREATE POLICY "moments_communities_insert" ON public.moments_communities
+  FOR INSERT WITH CHECK (
+    organization_id = public.user_org_id()
+    AND created_by  = auth.uid()
+    AND public.user_is_org_admin()
+  );
+
+CREATE POLICY "moments_communities_update" ON public.moments_communities
+  FOR UPDATE USING (organization_id = public.user_org_id())
+  WITH CHECK (
+    organization_id = public.user_org_id()
+    AND public.user_is_org_admin()
+  );
+
+CREATE POLICY "moments_communities_delete" ON public.moments_communities
+  FOR DELETE USING (
+    organization_id = public.user_org_id()
+    AND public.user_is_org_admin()
   );
 
 -- ══════════════════════════════════════════════════════════════════════
@@ -630,23 +632,14 @@ CREATE POLICY "moments_audit_insert" ON public.moments_audit_logs
 -- ══════════════════════════════════════════════════════════════════════
 -- 12. BUCKET DE STORAGE (ejecutar en Supabase Dashboard / CLI)
 -- ══════════════════════════════════════════════════════════════════════
-/*
-  Los buckets no se crean vía SQL estándar.
-  Ejecutar en Supabase Dashboard → Storage → New Bucket:
-
-  Nombre: moments-attachments
-  Tipo: PRIVATE (acceso solo vía signed URLs generados en API routes)
-  Tamaño máximo por archivo: 50 MB
-  MIME types permitidos: image/*, application/pdf, video/mp4, video/webm
-
-  Estructura de paths:
-    org/{organization_id}/moments/{attachment_id}/{file_name}
-
-  Políticas de Storage (en Dashboard → Storage → Policies):
-  - SELECT (download): solo con signed URL generado por service_role
-  - INSERT: solo desde rutas de API autenticadas (service_role)
-  - DELETE: solo service_role
-*/
+-- Los buckets no se crean vía SQL estándar.
+-- Ejecutar en Supabase Dashboard → Storage → New Bucket:
+--   Nombre: moments-attachments
+--   Tipo: PRIVATE (acceso solo vía signed URLs generados en API routes)
+--   Tamaño máximo por archivo: 50 MB
+--   MIME types permitidos: image/all, application/pdf, video/mp4, video/webm
+--   Estructura de paths: org/{organization_id}/moments/{attachment_id}/{file_name}
+--   Políticas: SELECT via signed URL (service_role), INSERT y DELETE solo service_role
 
 COMMENT ON TABLE public.moments_communities   IS 'Comunidades temáticas internas por organización';
 COMMENT ON TABLE public.moments_community_members IS 'Membresía de usuarios en comunidades';
