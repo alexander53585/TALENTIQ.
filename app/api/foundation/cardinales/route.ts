@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getOrgId } from '@/lib/foundation/orgId'
+import { getRequestContext } from '@/lib/auth/requestContext'
+import { toErrorResponse } from '@/lib/moments/errors'
 import { calcReadiness } from '@/lib/foundation/readiness'
 
 /* ── helpers ─────────────────────────────────────────── */
@@ -33,116 +34,120 @@ async function syncReadiness(
 
 /* ── GET — lista todas las competencias cardinales ───── */
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { orgId } = await getRequestContext()
+    const supabase = await createClient()
 
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    const { data, error } = await supabase
+      .from('cardinal_competencies')
+      .select('*')
+      .eq('organization_id', orgId)
+      .order('created_at', { ascending: true })
 
-  const { data, error } = await supabase
-    .from('cardinal_competencies')
-    .select('*')
-    .eq('organization_id', orgId)
-    .order('created_at', { ascending: true })
+    if (error) throw new Error(error.message)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const weights = await validateWeights(supabase, orgId)
+    return NextResponse.json({ data, weights })
 
-  const weights = await validateWeights(supabase, orgId)
-  return NextResponse.json({ data, weights })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }
 
 /* ── POST — crear nueva competencia cardinal ─────────── */
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { orgId } = await getRequestContext()
+    const supabase = await createClient()
 
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    const body = await req.json().catch(() => null)
+    if (!body?.name) return NextResponse.json({ error: 'name es requerido', code: 'VALIDATION_ERROR' }, { status: 400 })
 
-  const body = await req.json().catch(() => null)
-  if (!body?.name) return NextResponse.json({ error: 'name es requerido' }, { status: 400 })
+    const { data, error } = await supabase
+      .from('cardinal_competencies')
+      .insert({
+        organization_id:    orgId,
+        name:               body.name,
+        definition:         body.definition ?? null,
+        dimension:          body.dimension ?? null,
+        relative_weight:    body.relative_weight ?? 0,
+        min_level_expected: body.min_level_expected ?? 1,
+      })
+      .select()
+      .single()
 
-  const { data, error } = await supabase
-    .from('cardinal_competencies')
-    .insert({
-      organization_id:    orgId,
-      name:               body.name,
-      definition:         body.definition ?? null,
-      dimension:          body.dimension ?? null,
-      relative_weight:    body.relative_weight ?? 0,
-      min_level_expected: body.min_level_expected ?? 1,
-    })
-    .select()
-    .single()
+    if (error) throw new Error(error.message)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const weights   = await validateWeights(supabase, orgId)
+    const readiness = await syncReadiness(supabase, orgId)
+    return NextResponse.json({ data, weights, readiness }, { status: 201 })
 
-  const weights  = await validateWeights(supabase, orgId)
-  const readiness = await syncReadiness(supabase, orgId)
-  return NextResponse.json({ data, weights, readiness }, { status: 201 })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }
 
 /* ── PUT — actualizar (batch o individual) ───────────── */
 export async function PUT(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { orgId } = await getRequestContext()
+    const supabase = await createClient()
 
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    const body = await req.json().catch(() => null)
+    if (!body) return NextResponse.json({ error: 'Body inválido', code: 'VALIDATION_ERROR' }, { status: 400 })
 
-  const body = await req.json().catch(() => null)
-  if (!body) return NextResponse.json({ error: 'Body inválido' }, { status: 400 })
+    // Batch: array de {id, ...campos}
+    const items: any[] = Array.isArray(body) ? body : [body]
 
-  // Batch: array de {id, ...campos}
-  const items: any[] = Array.isArray(body) ? body : [body]
+    const results = await Promise.all(
+      items.map(async (item) => {
+        const { id, ...fields } = item
+        if (!id) return { error: 'id requerido' }
+        // Nunca permitir cambiar organization_id
+        delete fields.organization_id
+        const { data, error } = await supabase
+          .from('cardinal_competencies')
+          .update(fields)
+          .eq('id', id)
+          .eq('organization_id', orgId) // RLS extra
+          .select()
+          .single()
+        return error ? { error: error.message } : { data }
+      }),
+    )
 
-  const results = await Promise.all(
-    items.map(async (item) => {
-      const { id, ...fields } = item
-      if (!id) return { error: 'id requerido' }
-      // Nunca permitir cambiar organization_id
-      delete fields.organization_id
-      const { data, error } = await supabase
-        .from('cardinal_competencies')
-        .update(fields)
-        .eq('id', id)
-        .eq('organization_id', orgId) // RLS extra
-        .select()
-        .single()
-      return error ? { error: error.message } : { data }
-    }),
-  )
+    const weights   = await validateWeights(supabase, orgId)
+    const readiness = await syncReadiness(supabase, orgId)
+    return NextResponse.json({ results, weights, readiness })
 
-  const weights   = await validateWeights(supabase, orgId)
-  const readiness = await syncReadiness(supabase, orgId)
-  return NextResponse.json({ results, weights, readiness })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }
 
 /* ── DELETE — eliminar por id ────────────────────────── */
 export async function DELETE(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { orgId } = await getRequestContext()
+    const supabase = await createClient()
 
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'id requerido', code: 'VALIDATION_ERROR' }, { status: 400 })
 
-  const { searchParams } = new URL(req.url)
-  const id = searchParams.get('id')
-  if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
+    const { error } = await supabase
+      .from('cardinal_competencies')
+      .delete()
+      .eq('id', id)
+      .eq('organization_id', orgId)
 
-  const { error } = await supabase
-    .from('cardinal_competencies')
-    .delete()
-    .eq('id', id)
-    .eq('organization_id', orgId)
+    if (error) throw new Error(error.message)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    const weights   = await validateWeights(supabase, orgId)
+    const readiness = await syncReadiness(supabase, orgId)
+    return NextResponse.json({ ok: true, weights, readiness })
 
-  const weights   = await validateWeights(supabase, orgId)
-  const readiness = await syncReadiness(supabase, orgId)
-  return NextResponse.json({ ok: true, weights, readiness })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }

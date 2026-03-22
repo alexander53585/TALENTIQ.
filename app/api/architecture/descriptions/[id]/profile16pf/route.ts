@@ -1,31 +1,41 @@
 // POST /api/architecture/descriptions/[id]/profile16pf
-// Generates the 16PF reference profile for a job position via AI
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { aiComplete } from '@/lib/ai/claude';
+// Genera el perfil de referencia 16PF para un cargo via IA
+import { NextRequest, NextResponse } from 'next/server'
+import { getRequestContext } from '@/lib/auth/requestContext'
+import { toErrorResponse, ForbiddenError, NotFoundError } from '@/lib/moments/errors'
+import { createClient } from '@/lib/supabase/server'
+import { aiComplete } from '@/lib/ai/claude'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    // Verificar sesión, membresía activa y vigencia
+    const { orgId, role } = await getRequestContext()
 
-    const { id } = await params;
-
-    const [{ data: pos, error: posErr }, { data: membership }] = await Promise.all([
-      supabase.from('job_positions').select('*').eq('id', id).single(),
-      supabase.from('user_memberships').select('organization_id, role').eq('user_id', user.id).eq('is_active', true).single(),
-    ]);
-
-    if (posErr || !pos) return NextResponse.json({ error: 'Cargo no encontrado' }, { status: 404 });
-    if (!membership || pos.organization_id !== membership.organization_id) {
-      return NextResponse.json({ error: 'Sin acceso' }, { status: 403 });
+    // Solo owner, admin y hr_specialist pueden generar perfiles 16PF de referencia
+    const ALLOWED = ['owner', 'admin', 'hr_specialist'] as const
+    if (!(ALLOWED as readonly string[]).includes(role)) {
+      throw new ForbiddenError('Se requiere rol de RR.HH. o superior para generar perfiles 16PF')
     }
 
-    // Build context for AI
+    const { id } = await params
+    const supabase = await createClient()
+
+    // Obtener el cargo y validar cross-tenant simultáneamente
+    const { data: pos, error: posErr } = await supabase
+      .from('job_positions')
+      .select('*')
+      .eq('id', id)
+      .eq('organization_id', orgId)
+      .single()
+
+    if (posErr || !pos) {
+      throw new NotFoundError('Cargo no encontrado en tu organización')
+    }
+
+    // Construir contexto para la IA
     const cargoContext = `
 Cargo: ${pos.title || pos.name || 'Sin título'}
 Área: ${pos.area || 'N/A'}
@@ -33,7 +43,7 @@ Misión: ${pos.mission || pos.resumen_ejecutivo || 'N/A'}
 Funciones esenciales: ${JSON.stringify(pos.specific_competencies || pos.responsabilidades || [])}
 Competencias conductuales: ${JSON.stringify(pos.competencias || [])}
 KultuValue Score: ${pos.kultvalue_score || 'N/A'} | Banda: ${pos.kultvalue_band || 'N/A'}
-    `.trim();
+    `.trim()
 
     const prompt = `Basado en estas funciones esenciales y competencias del cargo:
 
@@ -53,32 +63,31 @@ Responde SOLO con JSON válido en este formato exacto:
     ...16 factores...
   ],
   "nota_metodologica": "Breve nota recordando que este perfil es referencial y orientativo, no un criterio de exclusión."
-}`;
+}`
 
     const raw = await aiComplete({
       messages: [{ role: 'user', content: prompt }],
       model: 'claude-sonnet-4-5',
       feature: 'generate_16pf_profile',
-    });
+    })
 
-    // Parse AI response
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('La IA no devolvió JSON válido');
-    const profile = JSON.parse(jsonMatch[0]);
+    // Parsear respuesta de IA
+    const jsonMatch = raw.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) throw new Error('La IA no devolvió JSON válido')
+    const profile = JSON.parse(jsonMatch[0])
 
-    // Save to DB
+    // Guardar en DB
     const { data: updated, error: saveErr } = await supabase
       .from('job_positions')
       .update({ profile_16pf_reference: profile })
       .eq('id', id)
       .select('id, profile_16pf_reference')
-      .single();
+      .single()
 
-    if (saveErr) throw saveErr;
+    if (saveErr) throw saveErr
 
-    return NextResponse.json(updated);
+    return NextResponse.json(updated)
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Error interno';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return toErrorResponse(err)
   }
 }

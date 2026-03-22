@@ -19,6 +19,7 @@
  *   - No select(*) — campos mínimos especificados
  *   - communityId validado como UUID y filtrado por org (evita enumeración)
  *   - 404 si communityId no pertenece a la org del usuario
+ *   - Si la comunidad es privada, 404 si el usuario no es miembro ni admin
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@/lib/supabase/server'
@@ -73,7 +74,8 @@ function decodeCursor(raw: string): Cursor | null {
 
 export async function GET(req: NextRequest) {
   try {
-    const { orgId, userId } = await getRequestContext()
+    // role es necesario para el check de comunidades privadas
+    const { orgId, userId, role } = await getRequestContext()
     const supabase          = await createClient()
 
     // ── 1. Parsear y validar query params ──────────────────────────────
@@ -119,16 +121,40 @@ export async function GET(req: NextRequest) {
     }
 
     // ── 2. Si se pide por comunidad, verificar que pertenece a la org ─
+    // Defensa en profundidad: si la comunidad es privada, verificar membresía
+    // del usuario (además del RLS que ya lo cubre a nivel DB).
     if (communityId) {
       const { data: community } = await supabase
         .from('moments_communities')
-        .select('id')
+        .select('id, is_private')
         .eq('id', communityId)
         .eq('organization_id', orgId)   // AISLAMIENTO TENANT
         .maybeSingle()
 
       if (!community) {
         throw new NotFoundError('Comunidad no encontrada')
+      }
+
+      // Comunidades privadas: defensa en profundidad sobre el RLS.
+      // Solo miembros o admins de la org pueden ver el feed de una comunidad privada.
+      if (community.is_private) {
+        const ADMIN_ROLES = new Set(['owner', 'admin', 'hr_specialist'])
+        const isOrgAdmin  = ADMIN_ROLES.has(role)
+
+        if (!isOrgAdmin) {
+          const { data: membership } = await supabase
+            .from('moments_community_members')
+            .select('id')
+            .eq('community_id', communityId)
+            .eq('organization_id', orgId)
+            .eq('user_id', userId)
+            .maybeSingle()
+
+          if (!membership) {
+            // 404 homogéneo — no revelamos que la comunidad existe pero es privada
+            throw new NotFoundError('Comunidad no encontrada')
+          }
+        }
       }
     }
 

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
-import { getOrgId } from '@/lib/foundation/orgId'
+import { getRequestContext } from '@/lib/auth/requestContext'
+import { toErrorResponse } from '@/lib/moments/errors'
 
 const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -74,99 +75,100 @@ export async function POST(
   _req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
-
-  // Obtener registro del documento
-  const { data: doc, error: docErr } = await supabase
-    .from('strategic_documents')
-    .select('*')
-    .eq('id', params.id)
-    .eq('organization_id', orgId)
-    .single()
-
-  if (docErr || !doc) return NextResponse.json({ error: 'Documento no encontrado' }, { status: 404 })
-
-  // Descargar archivo desde Storage
-  const { data: blob, error: dlErr } = await supabase.storage
-    .from('kulturh-docs')
-    .download(doc.storage_path)
-
-  if (dlErr || !blob) return NextResponse.json({ error: 'No se pudo descargar el archivo' }, { status: 500 })
-
-  const buffer = Buffer.from(await blob.arrayBuffer())
-  const { text, pdf } = await extractText(buffer, doc.mime_type ?? 'text/plain')
-
-  // Construir mensaje para Claude según tipo
-  let message: Anthropic.MessageParam
-
-  if (pdf) {
-    message = {
-      role: 'user',
-      content: [
-        {
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: pdf },
-        } as any,
-        { type: 'text', text: ANALYSIS_PROMPT },
-      ],
-    }
-  } else {
-    message = {
-      role: 'user',
-      content: `${ANALYSIS_PROMPT}\n\n== CONTENIDO DEL DOCUMENTO: ${doc.name} ==\n\n${text}`,
-    }
-  }
-
-  // Llamar a Claude
-  const response = await claude.messages.create({
-    model:      'claude-sonnet-4-6',
-    max_tokens: 1500,
-    system:     'Eres un consultor de cultura organizacional. Respondes siempre en español con JSON puro, sin texto adicional.',
-    messages:   [message],
-  })
-
-  const raw = response.content
-    .filter(b => b.type === 'text')
-    .map(b => (b as any).text)
-    .join('')
-
-  // Parsear JSON del análisis
-  let analysis: Record<string, any>
   try {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/)
-    analysis = JSON.parse(jsonMatch ? jsonMatch[0] : raw)
-  } catch {
-    return NextResponse.json({ error: 'La IA no devolvió un análisis válido. Intenta nuevamente.' }, { status: 422 })
-  }
+    const { orgId, userId } = await getRequestContext()
+    const supabase = await createClient()
 
-  // Guardar análisis en DB
-  const { data: updated, error: updateErr } = await supabase
-    .from('strategic_documents')
-    .update({
-      ai_analysis:   analysis,
-      utility_score: analysis.utilidad_score ?? null,
-      analyzed_at:   new Date().toISOString(),
+    // Obtener registro del documento (filtrando por org para aislamiento tenant)
+    const { data: doc, error: docErr } = await supabase
+      .from('strategic_documents')
+      .select('*')
+      .eq('id', params.id)
+      .eq('organization_id', orgId)
+      .single()
+
+    if (docErr || !doc) return NextResponse.json({ error: 'Documento no encontrado', code: 'NOT_FOUND' }, { status: 404 })
+
+    // Descargar archivo desde Storage
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from('kulturh-docs')
+      .download(doc.storage_path)
+
+    if (dlErr || !blob) return NextResponse.json({ error: 'No se pudo descargar el archivo', code: 'INTERNAL_ERROR' }, { status: 500 })
+
+    const buffer = Buffer.from(await blob.arrayBuffer())
+    const { text, pdf } = await extractText(buffer, doc.mime_type ?? 'text/plain')
+
+    // Construir mensaje para Claude según tipo
+    let message: Anthropic.MessageParam
+
+    if (pdf) {
+      message = {
+        role: 'user',
+        content: [
+          {
+            type: 'document',
+            source: { type: 'base64', media_type: 'application/pdf', data: pdf },
+          } as any,
+          { type: 'text', text: ANALYSIS_PROMPT },
+        ],
+      }
+    } else {
+      message = {
+        role: 'user',
+        content: `${ANALYSIS_PROMPT}\n\n== CONTENIDO DEL DOCUMENTO: ${doc.name} ==\n\n${text}`,
+      }
+    }
+
+    // Llamar a Claude
+    const response = await claude.messages.create({
+      model:      'claude-sonnet-4-6',
+      max_tokens: 1500,
+      system:     'Eres un consultor de cultura organizacional. Respondes siempre en español con JSON puro, sin texto adicional.',
+      messages:   [message],
     })
-    .eq('id', params.id)
-    .eq('organization_id', orgId)
-    .select()
-    .single()
 
-  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+    const raw = response.content
+      .filter(b => b.type === 'text')
+      .map(b => (b as any).text)
+      .join('')
 
-  // Loguear uso IA (fire-and-forget)
-  void supabase.from('ai_usage').insert({
-    organization_id: orgId,
-    user_id:         user.id,
-    feature:         'document_analysis',
-    input_tokens:    response.usage?.input_tokens  ?? 0,
-    output_tokens:   response.usage?.output_tokens ?? 0,
-  })
+    // Parsear JSON del análisis
+    let analysis: Record<string, any>
+    try {
+      const jsonMatch = raw.match(/\{[\s\S]*\}/)
+      analysis = JSON.parse(jsonMatch ? jsonMatch[0] : raw)
+    } catch {
+      return NextResponse.json({ error: 'La IA no devolvió un análisis válido. Intenta nuevamente.', code: 'INTERNAL_ERROR' }, { status: 422 })
+    }
 
-  return NextResponse.json({ data: updated })
+    // Guardar análisis en DB
+    const { data: updated, error: updateErr } = await supabase
+      .from('strategic_documents')
+      .update({
+        ai_analysis:   analysis,
+        utility_score: analysis.utilidad_score ?? null,
+        analyzed_at:   new Date().toISOString(),
+      })
+      .eq('id', params.id)
+      .eq('organization_id', orgId)
+      .select()
+      .single()
+
+    if (updateErr) throw new Error(updateErr.message)
+
+    // Loguear uso IA (fire-and-forget)
+    void supabase.from('ai_usage').insert({
+      organization_id: orgId,
+      user_id:         userId,
+      feature:         'document_analysis',
+      input_tokens:    response.usage?.input_tokens  ?? 0,
+      output_tokens:   response.usage?.output_tokens ?? 0,
+    })
+
+    return NextResponse.json({ data: updated })
+
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }

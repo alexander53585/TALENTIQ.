@@ -11,6 +11,11 @@ function getServiceClient() {
 
 // Devuelve las organizaciones más activas (con más vacantes publicadas)
 // para mostrar en el carousel "Empleadores destacados"
+// TODO: rate limit — este endpoint es público y podría usarse para enumeración de organizaciones.
+// Considerar implementar rate limiting (ej. con Upstash/Redis o middleware) antes de producción.
+// Nota de seguridad: retorna UUIDs internos junto a name/slug/count. Si en el futuro se crean
+// endpoints públicos que acepten organization_id sin autenticación, se debe eliminar el campo id
+// de la respuesta y usar slug como identificador externo.
 export async function GET() {
   try {
     const supabase = getServiceClient();

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getRequestContext } from '@/lib/auth/requestContext'
+import { toErrorResponse } from '@/lib/moments/errors'
 import { callClaude } from '@/lib/ai/server'
-import { getOrgId } from '@/lib/foundation/orgId'
 import { calcReadiness } from '@/lib/foundation/readiness'
 import { getLimits, getSizeLabel } from '@/lib/foundation/limits'
 
@@ -74,84 +75,86 @@ Escribe en tono profesional pero humano. Evita el lenguaje corporativo genérico
 
 /* ── POST /api/foundation/kultudna ───────────────────────── */
 export async function POST() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { orgId, userId } = await getRequestContext()
+    const supabase = await createClient()
 
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    // 1. Leer todos los datos de Foundation en paralelo
+    const [profileRes, cardinalesRes, axesRes] = await Promise.all([
+      supabase.from('organization_profiles').select('*').eq('organization_id', orgId).maybeSingle(),
+      supabase.from('cardinal_competencies').select('*').eq('organization_id', orgId).eq('is_active', true),
+      supabase.from('strategic_axes').select('*').eq('organization_id', orgId).eq('is_active', true).order('priority'),
+    ])
 
-  // 1. Leer todos los datos de Foundation en paralelo
-  const [profileRes, cardinalesRes, axesRes] = await Promise.all([
-    supabase.from('organization_profiles').select('*').eq('organization_id', orgId).maybeSingle(),
-    supabase.from('cardinal_competencies').select('*').eq('organization_id', orgId).eq('is_active', true),
-    supabase.from('strategic_axes').select('*').eq('organization_id', orgId).eq('is_active', true).order('priority'),
-  ])
+    const profile    = profileRes.data ?? {}
+    const cardinales = cardinalesRes.data ?? []
+    const axes       = axesRes.data ?? []
 
-  const profile    = profileRes.data ?? {}
-  const cardinales = cardinalesRes.data ?? []
-  const axes       = axesRes.data ?? []
+    // 2. Generar KultuDNA con Claude
+    const prompt = buildKultuDNAPrompt({ profile, cardinales, axes })
 
-  // 2. Generar KultuDNA con Claude
-  const prompt = buildKultuDNAPrompt({ profile, cardinales, axes })
+    const result = await callClaude(
+      [{ role: 'user', content: prompt }],
+      {
+        model:     'claude-sonnet-4-5',
+        maxTokens: 1024,
+        system:    'Eres un consultor experto en cultura organizacional. Respondes siempre en español, de forma precisa y sin texto adicional fuera del formato solicitado.',
+      }
+    )
 
-  const result = await callClaude(
-    [{ role: 'user', content: prompt }],
-    {
-      model:     'claude-sonnet-4-5',
-      maxTokens: 1024,
-      system:    'Eres un consultor experto en cultura organizacional. Respondes siempre en español, de forma precisa y sin texto adicional fuera del formato solicitado.',
-    }
-  )
+    const kultudna = result.content.trim()
 
-  const kultudna = result.content.trim()
+    // 3. Calcular readiness y persistir
+    const readiness = await calcReadiness(supabase, orgId)
 
-  // 3. Calcular readiness y persistir
-  const readiness = await calcReadiness(supabase, orgId)
+    const { data: updated, error } = await supabase
+      .from('organization_profiles')
+      .upsert({
+        organization_id:           orgId,
+        kultudna_summary:          kultudna,
+        readiness_score:           readiness.score,
+        is_ready_for_architecture: readiness.isReady,
+      }, { onConflict: 'organization_id' })
+      .select('kultudna_summary, readiness_score, is_ready_for_architecture, updated_at')
+      .single()
 
-  const { data: updated, error } = await supabase
-    .from('organization_profiles')
-    .upsert({
-      organization_id:           orgId,
-      kultudna_summary:          kultudna,
-      readiness_score:           readiness.score,
-      is_ready_for_architecture: readiness.isReady,
-    }, { onConflict: 'organization_id' })
-    .select('kultudna_summary, readiness_score, is_ready_for_architecture, updated_at')
-    .single()
+    if (error) throw new Error(error.message)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    // 4. Loguear uso de IA (fire-and-forget)
+    void supabase.from('ai_usage').insert({
+      organization_id: orgId,
+      user_id:         userId,
+      feature:         'kultudna_generation',
+      input_tokens:    result.usage?.input_tokens  ?? 0,
+      output_tokens:   result.usage?.output_tokens ?? 0,
+    })
 
-  // 4. Loguear uso de IA (fire-and-forget)
-  void supabase.from('ai_usage').insert({
-    organization_id: orgId,
-    user_id:         user.id,
-    feature:         'kultudna_generation',
-    input_tokens:    result.usage?.input_tokens  ?? 0,
-    output_tokens:   result.usage?.output_tokens ?? 0,
-  })
+    return NextResponse.json({
+      kultudna:    updated.kultudna_summary,
+      readiness:   { score: updated.readiness_score, isReady: updated.is_ready_for_architecture },
+      generatedAt: updated.updated_at,
+    })
 
-  return NextResponse.json({
-    kultudna:    updated.kultudna_summary,
-    readiness:   { score: updated.readiness_score, isReady: updated.is_ready_for_architecture },
-    generatedAt: updated.updated_at,
-  })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }
 
 /* ── GET /api/foundation/kultudna — leer el existente ──── */
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { orgId } = await getRequestContext()
+    const supabase = await createClient()
 
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ data: null })
+    const { data } = await supabase
+      .from('organization_profiles')
+      .select('kultudna_summary, readiness_score, is_ready_for_architecture, updated_at')
+      .eq('organization_id', orgId)
+      .maybeSingle()
 
-  const { data } = await supabase
-    .from('organization_profiles')
-    .select('kultudna_summary, readiness_score, is_ready_for_architecture, updated_at')
-    .eq('organization_id', orgId)
-    .maybeSingle()
+    return NextResponse.json({ data })
 
-  return NextResponse.json({ data })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }

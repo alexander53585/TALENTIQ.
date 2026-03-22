@@ -1,37 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { getOrgId } from '@/lib/foundation/orgId'
+import { getRequestContext } from '@/lib/auth/requestContext'
+import { toErrorResponse, ForbiddenError } from '@/lib/moments/errors'
 import { calcReadiness } from '@/lib/foundation/readiness'
 
 export async function GET() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  try {
+    const { orgId } = await getRequestContext()
+    const supabase = await createClient()
 
-  const orgId = await getOrgId(supabase, user.id)
-  if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    const { data, error } = await supabase
+      .from('organization_profiles')
+      .select('*')
+      .eq('organization_id', orgId)
+      .maybeSingle()
 
-  const { data, error } = await supabase
-    .from('organization_profiles')
-    .select('*')
-    .eq('organization_id', orgId)
-    .maybeSingle()
+    if (error) throw new Error(error.message)
+    return NextResponse.json({ data })
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ data })
+  } catch (err) {
+    return toErrorResponse(err)
+  }
 }
 
 export async function PUT(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const { orgId, role } = await getRequestContext()
 
-    const orgId = await getOrgId(supabase, user.id)
-    if (!orgId) return NextResponse.json({ error: 'No organization' }, { status: 403 })
+    // Solo owner y admin pueden modificar el perfil de fundación de la organización
+    const ALLOWED = ['owner', 'admin'] as const
+    if (!(ALLOWED as readonly string[]).includes(role)) {
+      throw new ForbiddenError('Se requiere rol de Administrador o Propietario para editar el perfil de fundación')
+    }
+
+    const supabase = await createClient()
 
     const body = await req.json().catch(() => null)
-    if (!body) return NextResponse.json({ error: 'Body inválido' }, { status: 400 })
+    if (!body) return NextResponse.json({ error: 'Body inválido', code: 'VALIDATION_ERROR' }, { status: 400 })
 
     // Campos base — siempre disponibles
     const baseFields = [
@@ -70,7 +75,7 @@ export async function PUT(req: NextRequest) {
         .upsert(safePatch, { onConflict: 'organization_id' })
         .select()
         .single()
-      if (safeError) return NextResponse.json({ error: safeError.message }, { status: 500 })
+      if (safeError) throw new Error(safeError.message)
 
       const readiness = await calcReadiness(supabase, orgId)
       await supabase
@@ -80,7 +85,7 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ data: { ...safeData, ...readiness } })
     }
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) throw new Error(error.message)
 
     // Recalcular readiness y persistirlo
     const readiness = await calcReadiness(supabase, orgId)
@@ -90,8 +95,8 @@ export async function PUT(req: NextRequest) {
       .eq('organization_id', orgId)
 
     return NextResponse.json({ data: { ...data, ...readiness } })
-  } catch (err: any) {
-    console.error('Foundation profile PUT error:', err)
-    return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })
+
+  } catch (err) {
+    return toErrorResponse(err)
   }
 }

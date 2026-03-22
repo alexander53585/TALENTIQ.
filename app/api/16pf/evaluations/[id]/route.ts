@@ -1,41 +1,29 @@
-// GET /api/16pf/evaluations/[id] — Get full evaluation (HR only)
-// PUT /api/16pf/evaluations/[id]/notes — Save specialist notes
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+// GET /api/16pf/evaluations/[id] — Obtiene evaluación completa (HR o Manager)
+import { NextRequest, NextResponse } from 'next/server'
+import { getRequestContext } from '@/lib/auth/requestContext'
+import { toErrorResponse, ForbiddenError, NotFoundError } from '@/lib/moments/errors'
+import { createClient } from '@/lib/supabase/server'
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    // 1. Verificar sesión, membresía activa Y vigencia (valid_until) via getRequestContext
+    const { orgId, role } = await getRequestContext()
 
-    const { id } = await params;
+    const { id } = await params
 
-    // 1. Validar membresía activa del usuario
-    const { data: membership } = await supabase
-      .from('user_memberships')
-      .select('organization_id, role')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (!membership) {
-      return NextResponse.json({ error: 'Sin membresía activa' }, { status: 403 });
-    }
-
-    // 2. Definir permisos base (HR Only)
-    const canAccessFull = ['owner', 'admin', 'hr_specialist'].includes(membership.role);
-    const isManager = membership.role === 'manager';
+    // 2. Definir permisos base (HR Only + Manager con vista parcial)
+    const canAccessFull = ['owner', 'admin', 'hr_specialist'].includes(role)
+    const isManager = role === 'manager'
 
     if (!canAccessFull && !isManager) {
-      return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de RR.HH.' }, { status: 403 });
+      throw new ForbiddenError('Acceso denegado. Se requiere rol de RR.HH. o superior.')
     }
 
-    // 3. Obtener la evaluación filtrando ESTRICTAMENTE por organization_id (Cross-tenant protection)
-    // Usamos el organization_id de la membresía para asegurar que no se consulten datos de otros tenants
+    // 3. Obtener la evaluación filtrando ESTRICTAMENTE por organization_id (protección cross-tenant)
+    const supabase = await createClient()
     const { data: evaluation, error } = await supabase
       .from('pf16_evaluations')
       .select(`
@@ -44,16 +32,16 @@ export async function GET(
         vacancy:vacancy_id(title)
       `)
       .eq('id', id)
-      .eq('organization_id', membership.organization_id)
-      .maybeSingle();
+      .eq('organization_id', orgId)
+      .maybeSingle()
 
-    if (error) throw error;
+    if (error) throw error
     if (!evaluation) {
-      return NextResponse.json({ error: 'Evaluación no encontrada en tu organización' }, { status: 404 });
+      throw new NotFoundError('Evaluación no encontrada en tu organización')
     }
 
     // 4. Aplicar Matriz de Autorización por Rol
-    const isMinimalRequest = request.nextUrl.searchParams.get('minimal') === 'true';
+    const isMinimalRequest = request.nextUrl.searchParams.get('minimal') === 'true'
 
     // Caso A: Managers o solicitud Minimal -> Vista parcial de seguimiento
     if (isManager || isMinimalRequest) {
@@ -66,18 +54,16 @@ export async function GET(
         progress_pct: evaluation.progress_pct,
         sent_at: evaluation.sent_at,
         completed_at: evaluation.completed_at,
-        // Al manager solo le llega el resumen de las notas si es que existe
+        // Al manager solo le llega el resumen de las notas si existe
         specialist_notes_summary: evaluation.specialist_notes?.resumen || null,
-      });
+      })
     }
 
-    // Caso B: Owner / Admin / HR Specialist -> Acceso Completo (Hardening: remove answers_encrypted)
-    const { answers_encrypted, ...safeEvaluation } = evaluation;
-    
-    return NextResponse.json(safeEvaluation);
+    // Caso B: Owner / Admin / HR Specialist -> Acceso Completo (sin respuestas encriptadas)
+    const { answers_encrypted, ...safeEvaluation } = evaluation
+
+    return NextResponse.json(safeEvaluation)
   } catch (err: unknown) {
-    console.error("[16PF API] Error:", err);
-    const message = err instanceof Error ? err.message : 'Error interno';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return toErrorResponse(err)
   }
 }

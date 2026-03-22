@@ -13,29 +13,28 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient }              from '@/lib/supabase/server'
-import { getOrgId }                  from '@/lib/foundation/orgId'
+import { getRequestContext }         from '@/lib/auth/requestContext'
 import {
   validateFile,
   buildStoragePath,
   uploadToStorage,
   logStorageAudit,
+  deleteFromStorage,
   MomentsStorageError,
   MAX_ATTACHMENTS_PER_POST,
   MAX_TOTAL_BYTES_PER_POST,
 } from '@/lib/moments/storage'
+import { toErrorResponse } from '@/lib/moments/errors'
 
 export async function POST(req: NextRequest) {
   try {
-    // ── 1. Autenticación ─────────────────────────────────────────────
+    // ── 1. Autenticación y resolución de contexto ─────────────────────
+    // getRequestContext() lanza NotAuthenticatedError / ForbiddenError
+    // si la sesión no existe o la membresía está inactiva/expirada.
+    const { orgId, userId } = await getRequestContext()
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
 
-    // ── 2. Resolución de org (server-side, nunca del cliente) ─────────
-    const orgId = await getOrgId(supabase, user.id)
-    if (!orgId) return NextResponse.json({ error: 'Sin membresía activa' }, { status: 403 })
-
-    // ── 3. Parsear multipart/form-data ────────────────────────────────
+    // ── 2. Parsear multipart/form-data ────────────────────────────────
     let formData: FormData
     try {
       formData = await req.formData()
@@ -43,8 +42,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Formato de solicitud inválido (se espera multipart/form-data)' }, { status: 400 })
     }
 
-    const file     = formData.get('file')
-    const postId   = formData.get('post_id')
+    const file      = formData.get('file')
+    const postId    = formData.get('post_id')
     const commentId = formData.get('comment_id')   // opcional
 
     if (!(file instanceof File)) {
@@ -54,7 +53,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Campo "post_id" requerido' }, { status: 400 })
     }
 
-    // ── 4. Verificar que el post pertenece a la org del usuario ───────
+    // ── 3. Verificar que el post pertenece a la org del usuario ───────
     const { data: post, error: postErr } = await supabase
       .from('moments_posts')
       .select('id, organization_id, is_locked')
@@ -71,7 +70,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'El post está bloqueado y no acepta adjuntos' }, { status: 422 })
     }
 
-    // ── 5. Verificar límite de archivos por post ──────────────────────
+    // ── 4. Verificar límite de archivos por post ──────────────────────
     const { count: existingCount, error: countErr } = await supabase
       .from('moments_attachments')
       .select('id', { count: 'exact', head: true })
@@ -86,7 +85,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── 6. Verificar tamaño total acumulado por post ──────────────────
+    // ── 5. Verificar tamaño total acumulado por post ──────────────────
     const { data: existing, error: sizeErr } = await supabase
       .from('moments_attachments')
       .select('file_size_bytes')
@@ -103,24 +102,24 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── 7. Leer buffer y validar MIME + magic bytes ───────────────────
-    const buffer = await file.arrayBuffer()
+    // ── 6. Leer buffer y validar MIME + magic bytes ───────────────────
+    const buffer    = await file.arrayBuffer()
     const validated = validateFile(buffer, file.type, file.name)
 
-    // ── 8. Construir path (server-generated, nunca del cliente) ───────
+    // ── 7. Construir path (server-generated, nunca del cliente) ───────
     const storagePath = buildStoragePath(orgId, postId, validated.extension)
 
-    // ── 9. Subir al bucket privado vía service_role ───────────────────
+    // ── 8. Subir al bucket privado vía service_role ───────────────────
     await uploadToStorage(storagePath, validated.buffer, validated.mimeType)
 
-    // ── 10. Registrar en moments_attachments ──────────────────────────
+    // ── 9. Registrar en moments_attachments ──────────────────────────
     const { data: attachment, error: insertErr } = await supabase
       .from('moments_attachments')
       .insert({
         organization_id: orgId,
         post_id:         postId,
         comment_id:      commentId && typeof commentId === 'string' ? commentId : null,
-        uploaded_by:     user.id,
+        uploaded_by:     userId,
         file_name:       `${crypto.randomUUID()}.${validated.extension}`,  // nombre en storage
         original_name:   validated.originalName,                            // nombre display
         file_type:       validated.mimeType,
@@ -132,14 +131,14 @@ export async function POST(req: NextRequest) {
 
     if (insertErr) {
       // Si falla el insert, limpiar el objeto ya subido
-      try { await (await import('@/lib/moments/storage')).deleteFromStorage(storagePath) } catch {}
+      try { await deleteFromStorage(storagePath) } catch {}
       throw insertErr
     }
 
-    // ── 11. Auditoría (fire-and-forget) ───────────────────────────────
+    // ── 10. Auditoría (fire-and-forget) ───────────────────────────────
     void logStorageAudit({
       orgId,
-      actorId:  user.id,
+      actorId:  userId,
       action:   'attachment.upload',
       targetId: attachment.id,
       metadata: {
@@ -156,7 +155,7 @@ export async function POST(req: NextRequest) {
     if (err instanceof MomentsStorageError) {
       return NextResponse.json({ error: err.message, code: err.code }, { status: 422 })
     }
-    console.error('[Moments Attachments] POST error:', err)
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 })
+    // Errores inesperados delegados a toErrorResponse (homogeneiza con el resto de Moments)
+    return toErrorResponse(err)
   }
 }
