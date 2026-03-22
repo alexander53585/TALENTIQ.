@@ -76,6 +76,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export type PostingPolicy = 'all_members' | 'admins_only'
 const VALID_POSTING_POLICIES = new Set<PostingPolicy>(['all_members', 'admins_only'])
 
+/** Matches moments_posts.post_type CHECK constraint in DB */
+export type PostType = 'discussion' | 'question' | 'announcement' | 'recognition'
+const VALID_POST_TYPES = new Set<PostType>(['discussion', 'question', 'announcement', 'recognition'])
+
 export type ReactionType = 'like' | 'celebrate' | 'support' | 'insightful' | 'curious'
 const VALID_REACTION_TYPES = new Set<ReactionType>([
   'like', 'celebrate', 'support', 'insightful', 'curious',
@@ -114,38 +118,50 @@ export function validateCommunityCreate(body: unknown): ValidatedCommunityCreate
 
 // ────────────────────────────────────────────────────────────────────────
 
+/** Matches moments_posts schema: post_type required, body (not content), title optional */
 export interface ValidatedPostCreate {
   community_id: string
-  content:      string
-  is_anonymous: boolean
+  post_type:    PostType
+  title:        string | null
+  body:         string
 }
 
 export function validatePostCreate(body: unknown): ValidatedPostCreate {
   if (!isPlainObject(body)) throw new ValidationError('El cuerpo de la solicitud debe ser JSON')
 
   const community_id = requireUUID(body.community_id, 'community_id')
-  const content      = requireString(body.content, 'content', { minLen: 1, maxLen: 5000 })
-  const is_anonymous = body.is_anonymous === true
 
-  return { community_id, content, is_anonymous }
+  const rawType = body.post_type
+  if (!VALID_POST_TYPES.has(rawType as PostType)) {
+    throw new ValidationError(
+      `"post_type" debe ser: ${[...VALID_POST_TYPES].join(' | ')}`,
+      'post_type',
+    )
+  }
+
+  const title = optionalString(body.title, 'title', { maxLen: 200 })
+  const text  = requireString(body.body, 'body', { minLen: 1, maxLen: 10_000 })
+
+  return { community_id, post_type: rawType as PostType, title, body: text }
 }
 
 // ────────────────────────────────────────────────────────────────────────
 
+/** Matches moments_comments schema: body (not content), max 5000, parent_id optional */
 export interface ValidatedCommentCreate {
   post_id:   string
-  content:   string
+  body:      string
   parent_id: string | null
 }
 
 export function validateCommentCreate(body: unknown): ValidatedCommentCreate {
   if (!isPlainObject(body)) throw new ValidationError('El cuerpo de la solicitud debe ser JSON')
 
-  const post_id   = requireUUID(body.post_id, 'post_id')
-  const content   = requireString(body.content, 'content', { minLen: 1, maxLen: 2000 })
+  const post_id  = requireUUID(body.post_id, 'post_id')
+  const text     = requireString(body.body, 'body', { minLen: 1, maxLen: 5_000 })
   const parent_id = optionalUUID(body.parent_id, 'parent_id')
 
-  return { post_id, content, parent_id }
+  return { post_id, body: text, parent_id }
 }
 
 // ────────────────────────────────────────────────────────────────────────
