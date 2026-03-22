@@ -98,7 +98,7 @@ export async function POST() {
   const result = await callClaude(
     [{ role: 'user', content: prompt }],
     {
-      model:     'claude-3-5-sonnet-latest',
+      model:     'claude-sonnet-4-5',
       maxTokens: 1024,
       system:    'Eres un consultor experto en cultura organizacional. Respondes siempre en español, de forma precisa y sin texto adicional fuera del formato solicitado.',
     }

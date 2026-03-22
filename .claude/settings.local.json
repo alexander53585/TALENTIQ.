@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -l \"job_positions\" /c/Users/USER/.gemini/antigravity/scratch/talentiq-app/supabase/migrations/*)",
+      "Bash(grep -h 'CREATE TABLE IF NOT EXISTS job_positions' /c/Users/USER/.gemini/antigravity/scratch/talentiq-app/supabase/migrations/* -A 20)",
+      "Bash(grep -h job_positions /c/Users/USER/.gemini/antigravity/scratch/talentiq-app/supabase/migrations/002*)",
+      "Bash(npx next:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/vacantes)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3001/vacantes)",
+      "Bash(find /c/Users/USER/.gemini/antigravity/scratch/talentiq-app -type d -name *model*)",
+      "Bash(xargs grep:*)"
+    ]
+  }
+}
