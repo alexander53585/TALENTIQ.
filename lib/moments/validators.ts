@@ -72,8 +72,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 // ── Tipos de payload ───────────────────────────────────────────────────
 
-export type PostingPolicy = 'open' | 'admins_only' | 'members_only'
-const VALID_POSTING_POLICIES = new Set<PostingPolicy>(['open', 'admins_only', 'members_only'])
+/** Matches moments_communities.posting_policy CHECK constraint in DB */
+export type PostingPolicy = 'all_members' | 'admins_only'
+const VALID_POSTING_POLICIES = new Set<PostingPolicy>(['all_members', 'admins_only'])
 
 export type ReactionType = 'like' | 'celebrate' | 'support' | 'insightful' | 'curious'
 const VALID_REACTION_TYPES = new Set<ReactionType>([
@@ -98,7 +99,7 @@ export function validateCommunityCreate(body: unknown): ValidatedCommunityCreate
   const name        = requireString(body.name, 'name', { minLen: 2, maxLen: 80 })
   const description = optionalString(body.description, 'description', { maxLen: 500 })
 
-  const rawPolicy   = body.posting_policy ?? 'open'
+  const rawPolicy   = body.posting_policy ?? 'all_members'
   if (!VALID_POSTING_POLICIES.has(rawPolicy as PostingPolicy)) {
     throw new ValidationError(
       `"posting_policy" debe ser uno de: ${[...VALID_POSTING_POLICIES].join(', ')}`,

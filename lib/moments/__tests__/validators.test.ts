@@ -18,22 +18,22 @@ describe('validateCommunityCreate', () => {
     const result = validateCommunityCreate({
       name:           'Engineering',
       description:    'For engineers',
-      posting_policy: 'open',
+      posting_policy: 'all_members',
       is_private:     false,
     })
     expect(result.name).toBe('Engineering')
-    expect(result.posting_policy).toBe('open')
+    expect(result.posting_policy).toBe('all_members')
     expect(result.is_private).toBe(false)
   })
 
   it('trims whitespace from name', () => {
-    const result = validateCommunityCreate({ name: '  HR Team  ', posting_policy: 'open' })
+    const result = validateCommunityCreate({ name: '  HR Team  ', posting_policy: 'all_members' })
     expect(result.name).toBe('HR Team')
   })
 
-  it('defaults posting_policy to open when omitted', () => {
+  it('defaults posting_policy to all_members when omitted', () => {
     const result = validateCommunityCreate({ name: 'Test' })
-    expect(result.posting_policy).toBe('open')
+    expect(result.posting_policy).toBe('all_members')
   })
 
   it('accepts null description', () => {
@@ -57,7 +57,7 @@ describe('validateCommunityCreate', () => {
   })
 
   it('throws on invalid posting_policy', () => {
-    expect(() => validateCommunityCreate({ name: 'Test', posting_policy: 'public' }))
+    expect(() => validateCommunityCreate({ name: 'Test', posting_policy: 'open' }))
       .toThrow(ValidationError)
   })
 

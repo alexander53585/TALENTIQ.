@@ -53,20 +53,20 @@ export function canDeleteCommunity(role: OrgRole): boolean {
 
 // ── Posts ──────────────────────────────────────────────────────────────
 
-export type PostingPolicy = 'open' | 'admins_only' | 'members_only'
+/** Matches moments_communities.posting_policy CHECK constraint in DB */
+export type PostingPolicy = 'all_members' | 'admins_only'
 
 /**
  * ¿Puede publicar en una comunidad dado su política de publicación?
- * - open: cualquier miembro
- * - admins_only: solo admin roles
- * - members_only: cualquier miembro (igual que open — distinción para futuros membership checks)
+ * - all_members: cualquier miembro activo
+ * - admins_only: solo roles admin
  */
 export function canPostInCommunity(
   role:   OrgRole,
   policy: PostingPolicy,
 ): boolean {
   if (policy === 'admins_only') return isAdmin(role)
-  return true  // open | members_only → cualquier rol activo puede postear
+  return true  // all_members → cualquier rol activo puede postear
 }
 
 /**

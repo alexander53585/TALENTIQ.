@@ -79,11 +79,8 @@ describe('canDeleteCommunity', () => {
 })
 
 describe('canPostInCommunity', () => {
-  it('open policy — all roles can post', () => {
-    ALL_ROLES.forEach(r => expect(canPostInCommunity(r, 'open')).toBe(true))
-  })
-  it('members_only policy — all roles can post', () => {
-    ALL_ROLES.forEach(r => expect(canPostInCommunity(r, 'members_only')).toBe(true))
+  it('all_members policy — all roles can post', () => {
+    ALL_ROLES.forEach(r => expect(canPostInCommunity(r, 'all_members')).toBe(true))
   })
   it('admins_only policy — only admin roles can post', () => {
     ADMIN_ROLES.forEach(r => expect(canPostInCommunity(r, 'admins_only')).toBe(true))
