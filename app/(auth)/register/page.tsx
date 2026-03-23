@@ -1,7 +1,6 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
+import { Suspense } from 'react'
 import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -53,7 +52,7 @@ function AuthInput({ label, type, value, onChange, placeholder, required, icon }
   )
 }
 
-export default function RegisterPage() {
+function RegisterPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const inviteToken = searchParams.get('invite')
@@ -194,4 +193,8 @@ export default function RegisterPage() {
       </div>
     </div>
   )
+}
+
+export default function RegisterPage() {
+  return <Suspense fallback={null}><RegisterPageInner /></Suspense>
 }
