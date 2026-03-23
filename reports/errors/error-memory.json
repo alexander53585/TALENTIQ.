@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "created_at": "2026-03-22T00:00:00.000Z",
-  "last_updated": "2026-03-22T00:00:00.000Z",
-  "total_errors_seen": 18,
+  "last_updated": "2026-03-23T04:02:48.851Z",
+  "total_errors_seen": 26,
   "errors": [
     {
       "signature": "TS2802: Set/Map iterator spread downlevelIteration",
@@ -57,6 +57,94 @@
       "probable_root_cause": "params is not a Promise in Next.js 14 route handlers",
       "suggested_fix": "Use const { id } = params not const { id } = await params",
       "prevention_rule": "In Next.js 14 App Router: params in route.ts are NOT promises. Never await params directly.",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test FAIL: .claude/worktrees/agent-a49a3971/lib/moments/__tests__/social.isolation.test.ts",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 1,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test FAIL: .claude/worktrees/agent-a49a3971/lib/moments/__tests__/validators.test.ts",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 29,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test FAIL: .claude/worktrees/agent-a770881f/lib/moments/__tests__/social.isolation.test.ts",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 1,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test FAIL: .claude/worktrees/agent-a770881f/lib/moments/__tests__/validators.test.ts",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 29,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test failed: .claude/worktrees/agent-a49a3971/lib/moments/__tests__/validators.test.ts > vali",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 29,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test failed: .claude/worktrees/agent-a770881f/lib/moments/__tests__/validators.test.ts > vali",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 29,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test failed: .claude/worktrees/agent-a49a3971/lib/moments/__tests__/social.isolation.test.ts ",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 1,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
+      "status": "resolved"
+    },
+    {
+      "signature": "Test failed: .claude/worktrees/agent-a770881f/lib/moments/__tests__/social.isolation.test.ts ",
+      "module": "Vitest",
+      "first_seen": "2026-03-23T03:52:45.232Z",
+      "last_seen": "2026-03-23T03:52:45.232Z",
+      "count": 1,
+      "probable_root_cause": "Under investigation",
+      "suggested_fix": "Check the error output and fix accordingly",
+      "prevention_rule": "Artifact from agent worktree execution — excluded via vitest.config.ts exclude pattern",
       "status": "resolved"
     }
   ]
