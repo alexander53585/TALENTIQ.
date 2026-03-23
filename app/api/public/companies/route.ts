@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { checkPublicRateLimit } from '@/lib/rateLimit';
 
 function getServiceClient() {
   return createServerClient(
@@ -10,13 +11,23 @@ function getServiceClient() {
 }
 
 // Devuelve las organizaciones más activas (con más vacantes publicadas)
-// para mostrar en el carousel "Empleadores destacados"
-// TODO: rate limit — este endpoint es público y podría usarse para enumeración de organizaciones.
-// Considerar implementar rate limiting (ej. con Upstash/Redis o middleware) antes de producción.
-// Nota de seguridad: retorna UUIDs internos junto a name/slug/count. Si en el futuro se crean
-// endpoints públicos que acepten organization_id sin autenticación, se debe eliminar el campo id
-// de la respuesta y usar slug como identificador externo.
-export async function GET() {
+// para mostrar en el carousel "Empleadores destacados".
+// El campo 'id' (UUID interno) fue eliminado — se usa 'slug' como identificador externo único.
+export async function GET(request: NextRequest) {
+  // Rate limit: 30 req/min por IP para el carousel de empresas
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown';
+
+  const rl = checkPublicRateLimit(`companies:${ip}`, { maxRequests: 30, windowMs: 60_000 });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta de nuevo en unos segundos.' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+    );
+  }
+
   try {
     const supabase = getServiceClient();
 
@@ -40,9 +51,10 @@ export async function GET() {
       map.get(key)!.count += 1;
     }
 
-    // Top 8 con más vacantes
+    // Top 8 con más vacantes.
+    // 'id' (UUID interno) eliminado — usar 'slug' como identificador externo
     const companies = Array.from(map.entries())
-      .map(([id, val]) => ({ id, ...val }))
+      .map(([, val]) => val)
       .sort((a, b) => b.count - a.count)
       .slice(0, 8);
 

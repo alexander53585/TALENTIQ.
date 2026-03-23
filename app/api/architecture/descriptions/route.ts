@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getRequestContext } from '@/lib/auth/requestContext'
-import { toErrorResponse } from '@/lib/moments/errors'
+import { toErrorResponse, ForbiddenError } from '@/lib/moments/errors'
+
+// Roles que pueden crear/modificar descripciones de arquitectura
+const HR_ROLES = ['owner', 'admin', 'hr_specialist'] as const
+// Solo owner y admin pueden eliminar descripciones
+const ADMIN_ROLES = ['owner', 'admin'] as const
 
 export async function GET(req: NextRequest) {
   try {
@@ -34,7 +39,13 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { orgId, userId } = await getRequestContext()
+    const { orgId, userId, role } = await getRequestContext()
+
+    // Solo roles privilegiados pueden crear o modificar descripciones de cargos
+    if (!HR_ROLES.includes(role as typeof HR_ROLES[number])) {
+      throw new ForbiddenError('Solo owner, admin o hr_specialist pueden crear descripciones de cargos')
+    }
+
     const supabase = await createClient()
 
     const body = await req.json()
@@ -65,7 +76,13 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { orgId } = await getRequestContext()
+    const { orgId, role } = await getRequestContext()
+
+    // Solo owner y admin pueden eliminar descripciones de cargos
+    if (!ADMIN_ROLES.includes(role as typeof ADMIN_ROLES[number])) {
+      throw new ForbiddenError('Solo owner o admin pueden eliminar descripciones de cargos')
+    }
+
     const supabase = await createClient()
 
     const { searchParams } = new URL(req.url)
