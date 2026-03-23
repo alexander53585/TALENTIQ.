@@ -1,0 +1,63 @@
+{
+  "version": "1.0.0",
+  "created_at": "2026-03-22T00:00:00.000Z",
+  "last_updated": "2026-03-22T00:00:00.000Z",
+  "total_errors_seen": 18,
+  "errors": [
+    {
+      "signature": "TS2802: Set/Map iterator spread downlevelIteration",
+      "module": "lib/16pf/engine.ts",
+      "first_seen": "2026-03-01T00:00:00.000Z",
+      "last_seen": "2026-03-15T00:00:00.000Z",
+      "count": 4,
+      "probable_root_cause": "tsconfig targets ES5 but uses Set/Map iterators with spread operator",
+      "suggested_fix": "Use Array.from(set) instead of [...set] spread",
+      "prevention_rule": "NEVER use spread on Set/Map. Always Array.from(). Check tsconfig target before using iterators.",
+      "status": "resolved"
+    },
+    {
+      "signature": "TS2345: string|undefined not assignable to string in Supabase result",
+      "module": "app/api/**/route.ts",
+      "first_seen": "2026-03-10T00:00:00.000Z",
+      "last_seen": "2026-03-20T00:00:00.000Z",
+      "count": 6,
+      "probable_root_cause": "Supabase query results can be null/undefined; not null-checked before use",
+      "suggested_fix": "Add null checks: data?.field ?? defaultValue or early return if !data",
+      "prevention_rule": "All Supabase query results are nullable. Always null-check before accessing properties.",
+      "status": "resolved"
+    },
+    {
+      "signature": "SQL: policy already exists for table",
+      "module": "supabase/migrations/*.sql",
+      "first_seen": "2026-03-18T00:00:00.000Z",
+      "last_seen": "2026-03-22T00:00:00.000Z",
+      "count": 3,
+      "probable_root_cause": "Migration creates RLS policy without checking existence first",
+      "suggested_fix": "Always use DROP POLICY IF EXISTS before CREATE POLICY in migrations",
+      "prevention_rule": "In SQL migrations: DROP POLICY IF EXISTS before CREATE POLICY. Use DO $$ blocks for idempotency.",
+      "status": "resolved"
+    },
+    {
+      "signature": "TS7006: catch parameter implicitly has any type",
+      "module": "app/api/**/route.ts",
+      "first_seen": "2026-03-20T00:00:00.000Z",
+      "last_seen": "2026-03-22T00:00:00.000Z",
+      "count": 5,
+      "probable_root_cause": "catch block uses untyped parameter instead of err: unknown",
+      "suggested_fix": "Use catch (err: unknown) and toErrorResponse(err) helper",
+      "prevention_rule": "Always type catch as unknown. Use toErrorResponse(err) from lib/moments/errors.ts for API routes.",
+      "status": "resolved"
+    },
+    {
+      "signature": "TS: await has no effect on params in Next.js 14 route handler",
+      "module": "app/api/16pf/evaluations/[id]/send/route.ts",
+      "first_seen": "2026-03-22T00:00:00.000Z",
+      "last_seen": "2026-03-22T00:00:00.000Z",
+      "count": 1,
+      "probable_root_cause": "params is not a Promise in Next.js 14 route handlers",
+      "suggested_fix": "Use const { id } = params not const { id } = await params",
+      "prevention_rule": "In Next.js 14 App Router: params in route.ts are NOT promises. Never await params directly.",
+      "status": "resolved"
+    }
+  ]
+}
