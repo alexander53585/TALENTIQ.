@@ -1,38 +1,32 @@
 // POST /api/16pf/evaluations/[id]/compare — Compare with job position reference profile
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { getRequestContext } from '@/lib/auth/requestContext';
+import { toErrorResponse, ForbiddenError } from '@/lib/moments/errors';
+
+const HR_ROLES = ['owner', 'admin', 'hr_specialist'] as const
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    // Resuelve sesión + membresía activa + valid_until en una sola llamada
+    const { orgId, role } = await getRequestContext()
 
-    const { id } = await params;
-
-    // 1. Validar membresía y rol de RR.HH. (Owner, Admin, HR Specialist)
-    const { data: membership } = await supabase
-      .from('user_memberships')
-      .select('organization_id, role')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (!membership || !['owner', 'admin', 'hr_specialist'].includes(membership.role)) {
-      return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de RR.HH.' }, { status: 403 });
+    if (!(HR_ROLES as readonly string[]).includes(role)) {
+      throw new ForbiddenError('Se requiere rol de RR.HH. o superior')
     }
 
-    // 2. Obtener evaluación (incluyendo decatipos y el cargo asociado)
-    // Filtro crucial: organization_id de la membresía para cross-tenant isolation
+    const { id } = await params;
+    const supabase = await createClient();
+
+    // Obtener evaluación — filtro cross-tenant por orgId del contexto
     const { data: evaluation, error: evalErr } = await supabase
       .from('pf16_evaluations')
       .select('*, job_positions(name, profile_16pf_reference)')
       .eq('id', id)
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', orgId)
       .maybeSingle();
 
     if (evalErr) throw evalErr;
@@ -110,7 +104,6 @@ REGLAS IMPORTANTES:
     return NextResponse.json(comparison);
   } catch (err: unknown) {
     console.error('[16PF Compare API] Error:', err);
-    const message = err instanceof Error ? err.message : 'Error interno';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return toErrorResponse(err)
   }
 }

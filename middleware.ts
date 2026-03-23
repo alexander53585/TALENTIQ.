@@ -31,7 +31,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Protect all company workspace routes
-  const companyRoutes = ['/dashboard', '/foundation', '/architecture', '/hiring', '/performance', '/learning', '/admin', '/profile']
+  const companyRoutes = ['/dashboard', '/foundation', '/architecture', '/hiring', '/performance', '/learning', '/admin', '/profile', '/moments']
   if (companyRoutes.some(r => pathname.startsWith(r))) {
     if (!user) {
       return NextResponse.redirect(new URL('/login', request.url))
@@ -48,7 +48,6 @@ export async function middleware(request: NextRequest) {
       .single()
 
     if (!membership) {
-      // Si eligió "configurar más tarde", dejarlo pasar
       const skipCookie = request.cookies.get('onboarding_skip')?.value
       if (!skipCookie) {
         return NextResponse.redirect(new URL('/onboarding', request.url))
@@ -56,7 +55,22 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Redirigir al onboarding si ya autenticado pero sin membresía intenta acceder a auth pages
+  // Protect consultant workspace — auth required, multi-org check done in layout
+  if (pathname.startsWith('/consultor')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+  }
+
+  // Protect candidate portal — redirect unauthenticated to /candidato/login
+  const candidatePublicPaths = ['/candidato/login', '/candidato/registro']
+  if (pathname.startsWith('/candidato') && !candidatePublicPaths.some(p => pathname.startsWith(p))) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/candidato/login', request.url))
+    }
+  }
+
+  // Redirect authenticated users away from auth pages
   if ((pathname === '/login' || pathname === '/register' || pathname === '/forgot-password') && user) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
@@ -66,7 +80,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Reset-password requiere sesión activa (viene del callback de recuperación)
+  // Reset-password requiere sesión activa
   if (pathname === '/reset-password' && !user) {
     return NextResponse.redirect(new URL('/forgot-password', request.url))
   }

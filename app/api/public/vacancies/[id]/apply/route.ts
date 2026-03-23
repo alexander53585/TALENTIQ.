@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { checkPublicRateLimit } from '@/lib/rateLimit';
 
 function getServiceClient() {
   return createServerClient(
@@ -13,6 +14,20 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limit: 5 postulaciones por IP en 10 minutos (anti-spam)
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    'unknown';
+
+  const rl = checkPublicRateLimit(`apply:${ip}`, { maxRequests: 5, windowMs: 10 * 60_000 });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: 'Demasiadas solicitudes. Intenta de nuevo en unos minutos.' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+    );
+  }
+
   try {
     const { id: vacancy_id } = await params;
     const supabase = getServiceClient();
@@ -45,7 +60,9 @@ export async function POST(
       return NextResponse.json({ error: 'Vacante no disponible' }, { status: 404 });
     }
 
-    // 2. Prevenir postulaciones duplicadas en la misma vacante
+    // 2. Prevenir postulaciones duplicadas en la misma vacante.
+    // Anti-enumeración: respuesta idéntica a una postulación exitosa nueva.
+    // No revelamos si el email ya postuló (evita oracle de enumeración de emails).
     const { data: existing } = await supabase
       .from('candidates')
       .select('id')
@@ -54,10 +71,13 @@ export async function POST(
       .maybeSingle();
 
     if (existing) {
-      return NextResponse.json(
-        { error: 'Ya existe una postulación con este email para esta vacante' },
-        { status: 409 }
-      );
+      // Anti-enumeración: respuesta idéntica a una postulación exitosa nueva
+      // No revelamos si el email ya postuló (evita oracle de enumeración)
+      return NextResponse.json({
+        success: true,
+        message: `¡Postulación recibida! El equipo de selección se pondrá en contacto contigo.`,
+        candidate_id: null, // null para no exponer el ID del candidato existente
+      });
     }
 
     // 3. Crear candidato con source=portal en el historial
@@ -93,9 +113,6 @@ export async function POST(
     });
   } catch (err: any) {
     console.error('[Public Apply API] Error:', err);
-    return NextResponse.json(
-      { error: err.message || 'Error al procesar la postulación' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Error al procesar la postulación' }, { status: 500 });
   }
 }

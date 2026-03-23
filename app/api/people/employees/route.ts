@@ -1,24 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getRequestContext } from '@/lib/auth/requestContext';
+import { toErrorResponse, ForbiddenError } from '@/lib/moments/errors';
+
+const HR_ROLES = ['owner', 'admin', 'hr_specialist'] as const
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    // Resuelve sesión + membresía activa + valid_until en una sola llamada
+    const { orgId, role, userId } = await getRequestContext()
 
-    // 1. Validar membresía activa y rol de RR.HH. (Owner, Admin, HR Specialist)
-    const { data: membership } = await supabase
-      .from('user_memberships')
-      .select('organization_id, role')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (!membership || !['owner', 'admin', 'hr_specialist'].includes(membership.role)) {
-      return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de RR.HH.' }, { status: 403 });
+    if (!(HR_ROLES as readonly string[]).includes(role)) {
+      throw new ForbiddenError('Acceso denegado. Se requiere rol de RR.HH.')
     }
 
+    const supabase = await createClient();
     const body = await request.json().catch(() => ({}));
     const { candidate_id, vacancy_id: body_vacancy_id, hire_date, onboarding_notes } = body;
 
@@ -40,23 +36,21 @@ export async function POST(request: NextRequest) {
         )
       `)
       .eq('id', candidate_id)
-      .eq('vacancies.organization_id', membership.organization_id)
+      .eq('vacancies.organization_id', orgId)
       .maybeSingle();
 
     if (candErr) throw candErr;
     if (!cand) return NextResponse.json({ error: 'Candidato no encontrado en tu organización' }, { status: 404 });
 
     const official_vacancy = (cand.vacancies as any);
-    const orgId = official_vacancy.organization_id;
     const positionId = official_vacancy.job_position_id;
     const official_vacancy_id = official_vacancy.id;
 
     // 3. Validación de integridad de la Vacante
     // Si el cliente envía un vacancy_id y no coincide con el del candidato, rechazamos (Data Integrity Check)
     if (body_vacancy_id && body_vacancy_id !== official_vacancy_id) {
-      return NextResponse.json({ 
-        error: 'Conflicto de integridad: El vacancy_id proporcionado no coincide con la vacante real del candidato.',
-        details: 'Manipulation attempt or stale UI'
+      return NextResponse.json({
+        error: 'El vacancy_id proporcionado no coincide con la vacante del candidato.'
       }, { status: 422 });
     }
 
@@ -79,7 +73,7 @@ export async function POST(request: NextRequest) {
     if (empErr) throw empErr;
 
     // 5. Actualizar estado del candidato a 'hired' con historial
-    const newHistoryEntry = { from: cand.status, to: 'hired', by: user.id, at: new Date().toISOString() };
+    const newHistoryEntry = { from: cand.status, to: 'hired', by: userId, at: new Date().toISOString() };
     const candHistory = Array.isArray(cand.status_history) ? cand.status_history : [];
     
     await supabase.from('candidates')
@@ -129,8 +123,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, employee });
-  } catch (err: any) {
-    console.error("[Hire Candidate API Error]:", err);
-    return NextResponse.json({ error: err.message || 'Error interno al procesar la contratación' }, { status: 500 });
+  } catch (err: unknown) {
+    console.error('[Hire Candidate API] Error:', err);
+    return toErrorResponse(err);
   }
 }

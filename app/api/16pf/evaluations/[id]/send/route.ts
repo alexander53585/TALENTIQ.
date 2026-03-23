@@ -1,31 +1,27 @@
 // POST /api/16pf/evaluations/[id]/send — Mark evaluation as sent
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { getRequestContext } from '@/lib/auth/requestContext';
+import { toErrorResponse, ForbiddenError } from '@/lib/moments/errors';
+
+const HR_ROLES = ['owner', 'admin', 'hr_specialist'] as const
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+    // Resuelve sesión + membresía activa + valid_until en una sola llamada
+    const { orgId, role } = await getRequestContext()
 
-    const { id } = await params;
-
-    // 1. Validar membresía y rol de RR.HH.
-    const { data: membership } = await supabase
-      .from('user_memberships')
-      .select('organization_id, role')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .maybeSingle();
-
-    if (!membership || !['owner', 'admin', 'hr_specialist'].includes(membership.role)) {
-      return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de RR.HH.' }, { status: 403 });
+    if (!(HR_ROLES as readonly string[]).includes(role)) {
+      throw new ForbiddenError('Se requiere rol de RR.HH. o superior')
     }
 
-    // 2. Actualizar la evaluación filtrando por ID y orgId del usuario
+    const { id } = params;
+    const supabase = await createClient();
+
+    // Actualizar la evaluación — filtro cross-tenant por orgId del contexto
     const { data: evaluation, error } = await supabase
       .from('pf16_evaluations')
       .update({
@@ -33,7 +29,7 @@ export async function POST(
         sent_at: new Date().toISOString(),
       })
       .eq('id', id)
-      .eq('organization_id', membership.organization_id)
+      .eq('organization_id', orgId)
       .select('id, status, access_token')
       .maybeSingle();
 
@@ -53,7 +49,7 @@ export async function POST(
       candidate_link: candidateLink,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Error interno';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[16PF Send API] Error:', err);
+    return toErrorResponse(err);
   }
 }
