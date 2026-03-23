@@ -787,7 +787,7 @@ export default function FoundationPage() {
         boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
         animation: 'fadeIn 0.3s ease',
       }}>
-        <style>{`@keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }`}</style>
+        <style suppressHydrationWarning>{`@keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:translateY(0) } }`}</style>
 
         {(() => { const limits = getLimits(state.size); return (<>
           {phase === 1 && <Phase1 state={state} onChange={chg} workshopMode={workshopMode} />}

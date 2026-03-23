@@ -113,7 +113,7 @@ export default function VacancyDetailPage({ params }: { params: Promise<{ id: st
         <div style={{ width: 40, height: 40, border: `3px solid ${C.primaryDim}`, borderTop: `3px solid ${C.primary}`, borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 16px' }} />
         <p style={{ color: C.textMuted, fontSize: 14 }}>Cargando vacante…</p>
       </div>
-      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+      <style suppressHydrationWarning>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 
@@ -138,7 +138,7 @@ export default function VacancyDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, fontFamily: FF, color: C.text }}>
-      <style>{`
+      <style suppressHydrationWarning>{`
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:${C.bg};font-family:${FF};-webkit-font-smoothing:antialiased}
         @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}

@@ -201,7 +201,7 @@ export default function VacantesPage() {
 
   return (
     <div style={S.page}>
-      <style>{`
+      <style suppressHydrationWarning>{`
         *{box-sizing:border-box;margin:0;padding:0}
         body{background:${C.bg};font-family:${FF};color:${C.text};-webkit-font-smoothing:antialiased}
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}

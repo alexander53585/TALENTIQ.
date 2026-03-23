@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import ParticleBackground from '@/components/ui/ParticleBackground'
 
@@ -74,6 +74,9 @@ function LinkedInIcon() {
 
 export default function LoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get('invite')
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -97,7 +100,12 @@ export default function LoginPage() {
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
       if (authError) throw authError
 
-      router.push('/dashboard')
+      // If coming from an invitation, redirect to accept it
+      if (inviteToken) {
+        router.push(`/invite/${inviteToken}`)
+      } else {
+        router.push('/dashboard')
+      }
       router.refresh()
     } catch (err: any) {
       const msg = (err.message || '').toLowerCase()
@@ -133,7 +141,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FF, padding: '40px 0', position: 'relative', overflow: 'hidden' }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box}::placeholder{color:#8FA3C0}@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+      <style suppressHydrationWarning>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');*{box-sizing:border-box}::placeholder{color:#8FA3C0}@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
       <ParticleBackground />
 
       <div style={{ width: '100%', maxWidth: 420, padding: '0 20px', animation: 'fadeIn 0.5s ease', position: 'relative', zIndex: 1 }}>

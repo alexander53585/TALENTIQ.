@@ -516,7 +516,7 @@ export default function DocumentsPage() {
         </div>
       )}
 
-      <style>{`
+      <style suppressHydrationWarning>{`
         @keyframes spin  { from { transform:rotate(0deg) }   to { transform:rotate(360deg) } }
         @keyframes pulse { 0%,100% { opacity:.6 } 50% { opacity:1 } }
       `}</style>

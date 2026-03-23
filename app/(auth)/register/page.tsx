@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import ParticleBackground from '@/components/ui/ParticleBackground'
 
@@ -53,7 +53,11 @@ function AuthInput({ label, type, value, onChange, placeholder, required, icon }
 
 export default function RegisterPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const searchParams = useSearchParams()
+  const inviteToken = searchParams.get('invite')
+  const inviteEmail = searchParams.get('email')
+
+  const [email, setEmail] = useState(inviteEmail || '')
   const [password, setPassword] = useState('')
   const [confirmPass, setConfirmPass] = useState('')
   const [loading, setLoading] = useState(false)
@@ -61,9 +65,16 @@ export default function RegisterPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
+  // Pre-fill email from invite param on mount
+  useEffect(() => {
+    if (inviteEmail) setEmail(inviteEmail)
+  }, [inviteEmail])
+
   const getRedirectUrl = () => {
     if (typeof window === 'undefined') return ''
-    return `${window.location.origin}/auth/callback`
+    // If registering via invitation, include token in callback so it auto-accepts
+    const base = `${window.location.origin}/auth/callback`
+    return inviteToken ? `${base}?invite=${inviteToken}` : base
   }
 
   const handleRegister = async (e?: React.FormEvent) => {
@@ -79,14 +90,21 @@ export default function RegisterPage() {
       })
       if (authError) throw authError
       if (data.user?.identities?.length === 0) {
+        // User already exists — if they came via invite, redirect to login
+        if (inviteToken) {
+          router.push(`/login?invite=${inviteToken}`)
+          return
+        }
         setError('Este correo ya está registrado. Intenta iniciar sesión.')
         setLoading(false); return
       }
       setSuccess(true)
     } catch (err: any) {
       const msg = (err.message || '').toLowerCase()
-      if (msg.includes('already registered') || msg.includes('already')) setError('Este correo ya está registrado. Intenta iniciar sesión.')
-      else if (msg.includes('password')) setError('La contraseña es muy débil. Debe tener al menos 6 caracteres.')
+      if (msg.includes('already registered') || msg.includes('already')) {
+        if (inviteToken) { router.push(`/login?invite=${inviteToken}`); return }
+        setError('Este correo ya está registrado. Intenta iniciar sesión.')
+      } else if (msg.includes('password')) setError('La contraseña es muy débil. Debe tener al menos 6 caracteres.')
       else if (msg.includes('rate limit')) setError('Se ha excedido el límite de registros. Intenta de nuevo en unos minutos.')
       else if (msg.includes('invalid') && msg.includes('email')) setError('El correo electrónico no es válido o su dominio está restringido.')
       else setError(err.message || 'Error al crear la cuenta. Intenta de nuevo.')

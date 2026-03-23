@@ -7,10 +7,11 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code')
   const token_hash = searchParams.get('token_hash')
   const type = searchParams.get('type')
+  const inviteToken = searchParams.get('invite') // invitation token passed via emailRedirectTo
   const next = searchParams.get('next') ?? '/dashboard'
 
-  // Default redirect
-  let redirectTo = new URL(next, origin)
+  // Default redirect — if an invite token is present, go to accept page first
+  let redirectTo = new URL(inviteToken ? `/invite/${inviteToken}` : next, origin)
 
   // Recovery type always goes to reset-password page
   if (type === 'recovery') {
