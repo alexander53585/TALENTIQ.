@@ -54,6 +54,7 @@ export default async function ConsultorCandidatosPage() {
     .select('organization_id, organizations(id, name)')
     .eq('user_id', user.id)
     .eq('is_active', true)
+    .or('valid_until.is.null,valid_until.gt.' + new Date().toISOString())
 
   const typedMemberships = (memberships as MembershipRow[] | null) ?? []
   const orgIds = typedMemberships.map((m) => m.organization_id)

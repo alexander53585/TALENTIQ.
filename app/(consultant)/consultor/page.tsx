@@ -37,6 +37,7 @@ export default async function ConsultorDashboard() {
     .select('organization_id, role, organizations(id, name, plan)')
     .eq('user_id', user.id)
     .eq('is_active', true)
+    .or('valid_until.is.null,valid_until.gt.' + new Date().toISOString())
 
   const orgIds = (memberships as MembershipRow[] | null)
     ?.map((m) => m.organization_id) ?? []
